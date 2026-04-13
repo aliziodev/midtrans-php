@@ -1,8 +1,9 @@
-# aliziodev/midtrans-php
+# Unofficial PHP SDK Midtrans API untuk PHP
 
 [![CI](https://github.com/aliziodev/midtrans-php/actions/workflows/ci.yml/badge.svg)](https://github.com/aliziodev/midtrans-php/actions/workflows/ci.yml)
 [![Release](https://github.com/aliziodev/midtrans-php/actions/workflows/release.yml/badge.svg)](https://github.com/aliziodev/midtrans-php/actions/workflows/release.yml)
 [![Latest Stable Version](https://img.shields.io/packagist/v/aliziodev/midtrans-php.svg)](https://packagist.org/packages/aliziodev/midtrans-php)
+[![Total Downloads](https://img.shields.io/packagist/dt/aliziodev/midtrans-php)](https://packagist.org/packages/aliziodev/midtrans-php)
 [![PHP Version](https://img.shields.io/packagist/php-v/aliziodev/midtrans-php)](https://packagist.org/packages/aliziodev/midtrans-php)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
