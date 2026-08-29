@@ -9,13 +9,32 @@ use Aliziodev\MidtransPhp\Exceptions\MidtransApiException;
 use Aliziodev\MidtransPhp\Exceptions\MidtransException;
 use Aliziodev\MidtransPhp\Http\CurlTransport;
 use Aliziodev\MidtransPhp\Http\Transport;
+use Aliziodev\MidtransPhp\Support\Sdk;
 
 final class SnapBiClient
 {
+    /**
+     * Renew slightly before the real expiry so a token cannot lapse mid-flight.
+     */
+    private const TOKEN_EXPIRY_MARGIN_SECONDS = 60;
+
+    private ?string $cachedAccessToken = null;
+
+    private int $cachedAccessTokenExpiresAt = 0;
+
     public function __construct(
         private readonly MidtransConfig $config,
         private readonly Transport $transport = new CurlTransport,
     ) {}
+
+    /**
+     * Drops the cached B2B access token, forcing the next call to mint a new one.
+     */
+    public function clearAccessTokenCache(): void
+    {
+        $this->cachedAccessToken = null;
+        $this->cachedAccessTokenExpiresAt = 0;
+    }
 
     /** @return array<string, mixed> */
     public function getAccessToken(): array
@@ -37,6 +56,7 @@ final class SnapBiClient
                 'X-SIGNATURE' => $signature,
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
+                'User-Agent' => Sdk::userAgent(),
             ],
             payload: [
                 'grant_type' => 'client_credentials',
@@ -111,6 +131,89 @@ final class SnapBiClient
     }
 
     /**
+     * Link a customer account (GoPay Tokenization).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/binding-api
+     */
+    public function bindAccount(array $payload, string $externalId, ?string $accessToken = null): array
+    {
+        return $this->authorizedRequest('POST', SnapBiPath::ACCOUNT_BINDING, $payload, $externalId, $accessToken);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/unbind-api
+     */
+    public function unbindAccount(array $payload, string $externalId, ?string $accessToken = null): array
+    {
+        return $this->authorizedRequest('POST', SnapBiPath::ACCOUNT_UNBINDING, $payload, $externalId, $accessToken);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/binding-inquiry-api
+     */
+    public function accountBindingInquiry(array $payload, string $externalId, ?string $accessToken = null): array
+    {
+        return $this->authorizedRequest('POST', SnapBiPath::ACCOUNT_INQUIRY, $payload, $externalId, $accessToken);
+    }
+
+    /**
+     * Capture a previously authorised pre-auth transaction.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/auth-payment-api-gopay-tokenization
+     */
+    public function authCapture(array $payload, string $externalId, ?string $accessToken = null): array
+    {
+        return $this->authorizedRequest('POST', SnapBiPath::AUTH_CAPTURE, $payload, $externalId, $accessToken);
+    }
+
+    /**
+     * Release a pre-auth hold without capturing it.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/cancel-api
+     */
+    public function authVoid(array $payload, string $externalId, ?string $accessToken = null): array
+    {
+        return $this->authorizedRequest('POST', SnapBiPath::AUTH_VOID, $payload, $externalId, $accessToken);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/transaction-history-list-api
+     */
+    public function transactionHistoryList(array $payload, string $externalId, ?string $accessToken = null): array
+    {
+        return $this->authorizedRequest('POST', SnapBiPath::TRANSACTION_HISTORY_LIST, $payload, $externalId, $accessToken);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/transaction-history-detail-api
+     */
+    public function transactionHistoryDetail(array $payload, string $externalId, ?string $accessToken = null): array
+    {
+        return $this->authorizedRequest('POST', SnapBiPath::TRANSACTION_HISTORY_DETAIL, $payload, $externalId, $accessToken);
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
@@ -122,11 +225,9 @@ final class SnapBiClient
         ?string $accessToken,
     ): array {
         $this->assertSnapBiCredentials();
+        ExternalId::assertValid($externalId);
 
-        $token = $accessToken ?? (string) ($this->getAccessToken()['accessToken'] ?? '');
-        if ($token === '') {
-            throw new MidtransException('Unable to resolve Snap-BI access token.');
-        }
+        $token = $accessToken ?? $this->resolveAccessToken();
 
         $timestamp = gmdate('c');
         $signature = $this->createSymmetricSignature(
@@ -151,6 +252,7 @@ final class SnapBiClient
                 'X-SIGNATURE' => $signature,
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
+                'User-Agent' => Sdk::userAgent(),
             ],
             payload: $payload,
         );
@@ -166,7 +268,7 @@ final class SnapBiClient
         $jsonBody = $payload === null ? null : json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         if ($payload !== null && $jsonBody === false) {
-            throw MidtransException::invalidResponse('Unable to encode payload to JSON.');
+            throw new MidtransException('Unable to encode Snap-BI payload to JSON: '.json_last_error_msg());
         }
 
         $response = $this->transport->request(
@@ -184,12 +286,52 @@ final class SnapBiClient
             throw MidtransException::invalidResponse($response->body);
         }
 
+        /** @var array<string, mixed> $decoded */
         if ($response->statusCode >= 400) {
             $message = (string) ($decoded['responseMessage'] ?? $decoded['status_message'] ?? 'Snap-BI API request failed.');
             throw new MidtransApiException($response->statusCode, $decoded, $message);
         }
 
+        // Snap-BI reports the real outcome in responseCode; the leading digits
+        // repeat the HTTP status, so a 2xx body can still carry a 4xx/5xx result.
+        $responseCode = (string) ($decoded['responseCode'] ?? '');
+
+        if (strlen($responseCode) === 7 && ! str_starts_with($responseCode, '2')) {
+            throw new MidtransApiException(
+                statusCode: (int) substr($responseCode, 0, 3),
+                payload: $decoded,
+                message: (string) ($decoded['responseMessage'] ?? 'Snap-BI API returned an error responseCode.'),
+            );
+        }
+
         return $decoded;
+    }
+
+    /**
+     * Reuses the B2B token for its advertised lifetime instead of minting one per
+     * request, which doubled the request count and burned rate limit.
+     */
+    private function resolveAccessToken(): string
+    {
+        if ($this->cachedAccessToken !== null && time() < $this->cachedAccessTokenExpiresAt) {
+            return $this->cachedAccessToken;
+        }
+
+        $response = $this->getAccessToken();
+        $token = (string) ($response['accessToken'] ?? '');
+
+        if ($token === '') {
+            throw new MidtransException('Unable to resolve Snap-BI access token: response carried no accessToken.');
+        }
+
+        $expiresIn = (int) ($response['expiresIn'] ?? 0);
+
+        $this->cachedAccessToken = $token;
+        $this->cachedAccessTokenExpiresAt = $expiresIn > self::TOKEN_EXPIRY_MARGIN_SECONDS
+            ? time() + $expiresIn - self::TOKEN_EXPIRY_MARGIN_SECONDS
+            : 0;
+
+        return $token;
     }
 
     private function assertSnapBiCredentials(): void
@@ -234,7 +376,7 @@ final class SnapBiClient
     ): string {
         $body = json_encode($requestBody, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if ($body === false) {
-            throw MidtransException::invalidResponse('Unable to encode Snap-BI body to JSON.');
+            throw new MidtransException('Unable to encode Snap-BI body to JSON: '.json_last_error_msg());
         }
 
         $hashedBody = strtolower(bin2hex(hash('sha256', $body, true)));
