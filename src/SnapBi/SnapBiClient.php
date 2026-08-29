@@ -355,11 +355,21 @@ final class SnapBiClient
 
     private function createAsymmetricSignature(string $data, string $privateKey): string
     {
-        $signature = '';
-        $result = openssl_sign($data, $signature, $privateKey, OPENSSL_ALGO_SHA256);
+        // Parsed first so a malformed PEM produces an actionable message instead
+        // of openssl_sign() emitting a raw PHP warning on its way to failing.
+        $key = openssl_pkey_get_private($privateKey);
 
-        if ($result !== true) {
-            throw new MidtransException('Unable to generate Snap-BI asymmetric signature.');
+        if ($key === false) {
+            throw new MidtransException(
+                'Snap-BI private key could not be read. Pass the PEM contents themselves, '
+                .'including the -----BEGIN PRIVATE KEY----- header, not a path to the file.'
+            );
+        }
+
+        $signature = '';
+
+        if (openssl_sign($data, $signature, $key, OPENSSL_ALGO_SHA256) !== true) {
+            throw new MidtransException('Unable to generate Snap-BI asymmetric signature.'); // @codeCoverageIgnore
         }
 
         return base64_encode($signature);
