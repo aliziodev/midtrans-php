@@ -23,10 +23,11 @@ Package ini dibuat sebagai SDK PHP murni (tanpa ketergantungan framework) untuk 
 - Menghindari duplikasi logic Midtrans di banyak project.
 - Menjaga boundary domain lebih bersih (SDK core terpisah dari adapter framework).
 - Menyediakan hardening yang relevan untuk production:
-  - retry terkontrol
-  - guard idempotency untuk request mutasi
-  - utility verifikasi webhook
-  - endpoint override untuk antisipasi perubahan host/path
+  - retry hanya untuk request yang terbukti aman diulang
+  - `Idempotency-Key` di-generate per-operasi, bukan satu key statis
+  - exponential backoff + jitter, dan menghormati `Retry-After`
+  - utility verifikasi webhook (termasuk jendela anti-replay)
+  - endpoint override yang divalidasi harus https
 
 ## Instalasi
 
@@ -82,12 +83,17 @@ Catatan konteks:
 | Subscription lifecycle | ✅ | ✅ | Setara |
 | Snap-BI (Direct Debit/VA/QRIS) | ✅ | ✅ | Setara |
 | Konfigurasi style | Static global config | Object config per client | Berbeda desain |
-| Retry policy | ❌ | ✅ (`maxRetries`, `retryDelayMs`) | Lebih kuat |
-| Guard idempotency saat retry mutasi | ❌ | ✅ (wajib `Idempotency-Key`) | Lebih aman |
+| Retry policy | ❌ | ✅ (backoff + jitter, `Retry-After`) | Lebih kuat |
+| Idempotency-Key per-operasi | ❌ | ✅ (auto-generate, divalidasi ≤46 char) | Lebih aman |
+| Retry hanya untuk operasi yang aman diulang | ❌ | ✅ | Lebih aman |
+| Cek `status_code` di body respons 2xx | ✅ | ✅ | Setara |
+| HTTP 202 tidak dianggap hasil final | ❌ | ✅ (`MidtransPendingException`) | Lebih aman |
 | Payment Link wrapper dedicated | ❌ | ✅ | Lebih lengkap |
 | Balance Mutation wrapper dedicated | ❌ | ✅ | Lebih lengkap |
 | Invoicing wrapper dedicated | ❌ | ✅ | Lebih lengkap |
 | Utility webhook verifier classic SHA512 | ❌ (umumnya di app layer) | ✅ | Lebih siap pakai |
+| Verifikasi webhook Snap-BI dari raw body | ❌ | ✅ | Lebih siap pakai |
+| Cache access token Snap-BI | ❌ | ✅ | Lebih hemat |
 
 ### Kapan Pilih Yang Mana
 
@@ -118,12 +124,30 @@ $config = new MidtransConfig(
     timeoutSeconds: 30,
     maxRetries: 2,
     retryDelayMs: 300,
+
+    // Prefix untuk Idempotency-Key yang di-generate per request.
+    // Maksimal 13 karakter (batas Midtrans 46 char - 33 char suffix acak).
+    idempotencyKeyPrefix: 'shop',
+
+    // Header opsional (lihat docs Midtrans "API Headers & Idempotency")
+    appendNotificationUrl: null,
+    overrideNotificationUrl: null,
+    paymentLocale: null, // 'id-ID' | 'en-EN'
+    popId: null,
 );
 ```
+
+Objek config aman untuk `var_dump()` dan `dd()` — semua kredensial dimasking lewat
+`__debugInfo()`. Catatan: `print_r()` dan `var_export()` memang mengabaikan
+`__debugInfo()` di PHP, jadi jangan pakai keduanya untuk dump config.
 
 ### 2) Endpoint Override (Future-Proof)
 
 Gunakan ini jika endpoint diproxy internal, gateway berubah, atau ada kebutuhan routing khusus.
+
+Semua override **wajib https**. Setiap request membawa server key di header
+`Authorization`, jadi override berskema `http://` ditolak kecuali kamu secara
+eksplisit menyalakan `allowInsecureBaseUrl: true` (hanya untuk mock lokal).
 
 ```php
 <?php
@@ -191,7 +215,24 @@ Endpoint core lain yang tersedia:
 - approve/deny/expire
 - refund + refund direct
 - pay account link/get/unbind
-- card register/token/point inquiry
+- point inquiry
+- `getBin()` — BIN API
+- `getGopayPromotions()` — promo GoPay Tokenization
+- `cancelSnapSession()` — batalkan halaman Snap sebelum expiry
+- `getSnapPreferences()` / `updateSnapPreferences()` — Snap Preference API v3
+
+> **Refund bisa ditolak.** Sejak 16 Maret 2026 skema kartu mewajibkan otorisasi
+> real-time ke issuing bank untuk refund, jadi request refund bisa berstatus
+> `deny` sama seperti charge. Tangani status itu, jangan asumsikan refund selalu
+> berhasil.
+
+> **Tokenisasi kartu: jangan dari server.** `cardToken()` dan `cardRegister()`
+> ditandai `@deprecated` sejak 2.0.0. Keduanya menaruh nomor kartu (dan CVV) di
+> query string URL dan membuat server kamu menyentuh data kartu mentah — itu
+> menarik aplikasi ke scope PCI-DSS SAQ D, dan URL tercatat di log web server,
+> proxy, dan APM. Midtrans mendokumentasikan tokenisasi sebagai flow browser:
+> muat `midtrans-new-3ds.min.js` dengan client key, panggil
+> `MidtransNew3ds.getCardToken()`, lalu kirim `token_id`-nya saja ke backend.
 
 ### 5) Subscription API v1
 
@@ -285,6 +326,12 @@ $invoice = $client->createInvoice([
 
 $detail = $client->getInvoice($invoice['id']);
 $void = $client->voidInvoice($invoice['id']);
+
+// Konversi quotation menjadi invoice (hanya document_type = quotation,
+// belum expired, dan belum pernah dikonversi).
+$converted = $client->convertInvoice($invoice['id'], [
+    'client' => ['email' => 'john@example.com'],
+]);
 ```
 
 ### 9) Snap-BI
@@ -321,20 +368,45 @@ Method Snap-BI yang tersedia:
 - create/status/cancel/refund untuk Direct Debit
 - create/status/cancel untuk VA
 - create/status/cancel/refund untuk QRIS
+- `bindAccount()` / `unbindAccount()` / `accountBindingInquiry()` — account linking
+- `authCapture()` / `authVoid()` — pre-authorization
+- `transactionHistoryList()` / `transactionHistoryDetail()` — reporting
+
+`X-EXTERNAL-ID` adalah satu-satunya proteksi replay yang ditawarkan Snap-BI
+(unik per request, TTL 24 jam). Pakai `ExternalId::generate()` untuk membuatnya,
+dan gunakan ulang nilai yang sama hanya saat mengulang operasi yang sama:
+
+```php
+<?php
+
+use Aliziodev\MidtransPhp\SnapBi\ExternalId;
+
+$externalId = ExternalId::generate();
+$result = $snapBi->createQris($payload, $externalId);
+```
+
+Access token B2B di-cache otomatis selama masa berlakunya. Panggil
+`$snapBi->clearAccessTokenCache()` kalau perlu memaksa token baru.
 
 ### 10) Webhook Verification
 
-Classic Midtrans signature SHA512:
+Classic Midtrans signature SHA512 — pakai `verifyRaw()` dengan body mentah:
 
 ```php
 <?php
 
 use Aliziodev\MidtransPhp\Webhooks\MidtransSignatureVerifier;
 
-$isValid = MidtransSignatureVerifier::verify($payload, $serverKey);
+// Laravel: $request->getContent()
+$isValid = MidtransSignatureVerifier::verifyRaw($rawBody, $serverKey);
 ```
 
-Snap-BI webhook RSA SHA256:
+`verifyRaw()` lebih aman daripada `verify($array, ...)` karena signature dihitung
+dari `gross_amount` sebagai string persis yang dikirim Midtrans (`"10000.00"`).
+Framework atau mapper yang meng-cast nilai itu ke float mengubahnya jadi
+`"10000"` dan verifikasi gagal.
+
+Snap-BI webhook RSA SHA256 — **wajib** body mentah:
 
 ```php
 <?php
@@ -342,24 +414,41 @@ Snap-BI webhook RSA SHA256:
 use Aliziodev\MidtransPhp\Webhooks\SnapBiWebhookVerifier;
 
 $isValid = SnapBiWebhookVerifier::verify(
-    body: $payload,
+    rawBody: $request->getContent(),
     signature: $xSignature,
     timestamp: $xTimestamp,
     notificationUrlPath: '/v1.0/debit/notify',
     publicKey: $snapBiPublicKey,
+    // toleransi X-TIMESTAMP, default 300 detik; null untuk mematikan
+    toleranceSeconds: 300,
 );
 ```
 
+Signature dihitung dari `sha256(minify(rawBody))`. Array hasil `json_decode()`
+yang di-encode ulang tidak pernah mereproduksi byte aslinya — `{}` kosong
+berubah jadi `[]` — sehingga notifikasi yang sah akan ditolak.
+
+> Signature valid membuktikan keaslian, bukan kebaruan. Notifikasi asli tetap
+> bisa di-replay. Selalu cek ulang transaksi lewat
+> `MidtransClient::transactionStatus()` sebelum melepas barang atau layanan.
+
 ## Error Handling
 
-Semua kegagalan API akan dilempar sebagai `MidtransApiException`.
-Kegagalan SDK/transport akan dilempar sebagai `MidtransException`.
+| Exception | Kapan dilempar |
+|---|---|
+| `MidtransApiException` | Midtrans menolak request — HTTP 4xx/5xx, atau HTTP 2xx dengan `status_code`/`responseCode` error di body |
+| `MidtransPendingException` | HTTP 202: request sebelumnya dengan Idempotency-Key yang sama masih diproses. **Bukan** hasil final |
+| `MidtransException` | Kegagalan transport, config, atau parsing respons |
+
+`MidtransPendingException` dan `MidtransApiException` sama-sama turunan
+`MidtransException`, jadi tangkap yang spesifik lebih dulu.
 
 ```php
 <?php
 
 use Aliziodev\MidtransPhp\Exceptions\MidtransApiException;
 use Aliziodev\MidtransPhp\Exceptions\MidtransException;
+use Aliziodev\MidtransPhp\Exceptions\MidtransPendingException;
 
 try {
     $result = $client->createPaymentLink([
@@ -376,21 +465,27 @@ try {
     if ($statusCode === 409) {
         // contoh: duplicate order_id
     }
+} catch (MidtransPendingException $e) {
+    // HTTP 202 - ulangi request yang sama dengan key yang sama untuk hasil final
 } catch (MidtransException $e) {
     // transport/config/response parsing error
 }
 ```
 
+Pesan pada `MidtransException` sudah dipotong dan diredaksi (rangkaian digit
+sepanjang nomor kartu diganti `[redacted]`), jadi body respons tidak bocor utuh
+ke log.
+
 ## Retry Dan Idempotency
 
-Aturan penting:
-- Jika `maxRetries > 0`, semua request non-GET wajib punya `Idempotency-Key`.
-- Ini untuk mencegah duplicate mutation saat retry.
+Midtrans men-cache respons pertama untuk sebuah `Idempotency-Key` selama **5 menit**
+dan mengembalikannya untuk request berikutnya yang memakai key yang sama —
+**terlepas dari isi body, dan lintas endpoint**. Karena itu SDK ini
+**men-generate key baru untuk setiap operasi mutasi**, bukan memakai satu key
+statis dari config.
 
 ```php
 <?php
-
-use Aliziodev\MidtransPhp\Support\IdempotencyKey;
 
 $config = new MidtransConfig(
     serverKey: 'Mid-server-prod-xxxx',
@@ -398,11 +493,79 @@ $config = new MidtransConfig(
     timeoutSeconds: 30,
     maxRetries: 2,
     retryDelayMs: 300,
+    idempotencyKeyPrefix: 'shop', // maksimal 13 karakter
 );
 
-$client = (new MidtransClient($config))
-    ->withIdempotencyKey(IdempotencyKey::generate('invoice-create'));
+$client = new MidtransClient($config);
+
+// Setiap charge di bawah ini mendapat Idempotency-Key sendiri.
+$client->coreCharge($orderA);
+$client->coreCharge($orderB);
 ```
+
+Kalau kamu perlu mengontrol key sendiri — misalnya untuk mengulang operasi yang
+sama persis setelah timeout — gunakan `withIdempotencyKey()`. Satu key untuk satu
+operasi:
+
+```php
+<?php
+
+use Aliziodev\MidtransPhp\Support\IdempotencyKey;
+
+$key = IdempotencyKey::generate('charge'); // simpan bersama order-nya
+
+$client = (new MidtransClient($config))->withIdempotencyKey($key);
+```
+
+Panjang key dibatasi **46 karakter**; Midtrans mengabaikan key yang lebih panjang
+tanpa memberi tahu, jadi SDK menolaknya lebih dulu daripada membiarkan proteksi
+retry mati diam-diam.
+
+### Kapan request diulang
+
+| Request | Diulang? | Alasan |
+|---|---|---|
+| `GET` apa pun | ✅ | Tidak mengubah state |
+| `POST` yang menerima `Idempotency-Key` | ✅ | Midtrans memutar ulang respons pertama |
+| `PATCH` / `DELETE` (void, delete, convert) | ✅ | Hanya mendorong state terminal |
+| `POST /v2/token`, `/v2/card/register`, `/v2/pay/account*` | ❌ | Midtrans tidak menerima `Idempotency-Key` di sini, jadi tidak ada proteksi replay |
+
+Retry memakai exponential backoff dengan jitter penuh, dan menghormati header
+`Retry-After` pada respons 429.
+
+### Refund
+
+`Idempotency-Key` hanya melindungi jendela 5 menit. Proteksi sebenarnya untuk
+refund adalah `refund_key`: tanpa itu Midtrans memperlakukan setiap request
+sebagai refund baru. Karena itu `refundTransaction()` dan
+`refundTransactionDirect()` menolak payload tanpa `refund_key` selama
+`maxRetries > 0`.
+
+```php
+<?php
+
+$client->refundTransaction('ORDER-1001', [
+    'refund_key' => 'refund-ORDER-1001-1', // stabil untuk satu refund
+    'amount' => 10000,
+    'reason' => 'out of stock',
+]);
+```
+
+## Migrasi 1.x ke 2.0
+
+| Perubahan | Aksi |
+|---|---|
+| `MidtransConfig::$defaultIdempotencyKey` dihapus | Hapus argumennya. Kalau butuh prefix, pakai `idempotencyKeyPrefix` (maks. 13 karakter). Key kini di-generate per request |
+| `SnapBiWebhookVerifier::verify()` menerima `rawBody: string`, bukan `body: array` | Kirim body mentah (`$request->getContent()`), bukan array hasil decode |
+| Override base URL wajib `https` | Perbaiki URL, atau set `allowInsecureBaseUrl: true` untuk mock lokal |
+| Refund tanpa `refund_key` melempar exception saat retry aktif | Tambahkan `refund_key` yang stabil, atau set `maxRetries: 0` |
+| HTTP 202 kini melempar `MidtransPendingException` | Tangkap exception itu dan ulangi dengan key yang sama |
+| Respons 2xx dengan `status_code` ≥ 401 (atau `responseCode` non-2xx di Snap-BI) kini melempar `MidtransApiException` | Hilangkan pengecekan `status_code` manual di sisi aplikasi |
+| `cardToken()` / `cardRegister()` `@deprecated` | Pindah ke tokenisasi sisi browser |
+| Transport error pada percobaan terakhir melempar `MidtransException` alih-alih mengembalikan respons 5xx dari percobaan sebelumnya | Tangkap `MidtransException` |
+
+`HttpResponse` sekarang punya parameter ketiga opsional `$headers`; implementasi
+`Transport` kustom tetap kompatibel tanpa perubahan.
 
 ## Testing
 
@@ -415,9 +578,10 @@ composer qa
 
 ## Roadmap
 
-- Typed exception per kategori error
 - Optional PSR-18 transport adapter
+- PSR-3 logger hook untuk audit trail request/response
 - Integrasi test yang lebih luas untuk skenario sandbox
+- Hapus `cardToken()` / `cardRegister()` di 3.0.0
 
 ## Catatan
 
