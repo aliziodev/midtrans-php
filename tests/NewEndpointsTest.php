@@ -96,11 +96,11 @@ final class NewEndpointsTest extends TestCase
         return [
             ['bindAccount', '/v1.0/registration-account-binding'],
             ['unbindAccount', '/v1.0/registration-account-unbinding'],
-            ['accountBindingInquiry', '/v1.0/registration-account-inquiry'],
-            ['authCapture', '/v1.0/auth/capture'],
-            ['authVoid', '/v1.0/auth/void'],
-            ['transactionHistoryList', '/v1.0/transaction-history-list'],
-            ['transactionHistoryDetail', '/v1.0/transaction-history-detail'],
+            ['getAccountBindingStatus', '/v1.0/registration-account-inquiry'],
+            ['captureAuthorization', '/v1.0/auth/capture'],
+            ['voidAuthorization', '/v1.0/auth/void'],
+            ['getTransactionHistoryList', '/v1.0/transaction-history-list'],
+            ['getTransactionHistoryDetail', '/v1.0/transaction-history-detail'],
         ];
     }
 

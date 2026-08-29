@@ -92,16 +92,16 @@ final class EndpointMapTest extends TestCase
     {
         return [
             'direct debit create' => ['createDirectDebit', '/v1.0/debit/payment-host-to-host'],
-            'direct debit status' => ['directDebitStatus', '/v1.0/debit/status'],
-            'direct debit cancel' => ['directDebitCancel', '/v1.0/debit/cancel'],
-            'direct debit refund' => ['directDebitRefund', '/v1.0/debit/refund'],
+            'direct debit status' => ['getDirectDebitStatus', '/v1.0/debit/status'],
+            'direct debit cancel' => ['cancelDirectDebit', '/v1.0/debit/cancel'],
+            'direct debit refund' => ['refundDirectDebit', '/v1.0/debit/refund'],
             'va create' => ['createVa', '/v1.0/transfer-va/create-va'],
-            'va status' => ['vaStatus', '/v1.0/transfer-va/status'],
-            'va cancel' => ['vaCancel', '/v1.0/transfer-va/delete-va'],
+            'va status' => ['getVaStatus', '/v1.0/transfer-va/status'],
+            'va cancel' => ['cancelVa', '/v1.0/transfer-va/delete-va'],
             'qris create' => ['createQris', '/v1.0/qr/qr-mpm-generate'],
-            'qris status' => ['qrisStatus', '/v1.0/qr/qr-mpm-query'],
-            'qris cancel' => ['qrisCancel', '/v1.0/qr/qr-mpm-cancel'],
-            'qris refund' => ['qrisRefund', '/v1.0/qr/qr-mpm-refund'],
+            'qris status' => ['getQrisStatus', '/v1.0/qr/qr-mpm-query'],
+            'qris cancel' => ['cancelQris', '/v1.0/qr/qr-mpm-cancel'],
+            'qris refund' => ['refundQris', '/v1.0/qr/qr-mpm-refund'],
         ];
     }
 

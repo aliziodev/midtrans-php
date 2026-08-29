@@ -58,7 +58,7 @@ final class SnapBiClientTest extends TestCase
         $this->expectException(MidtransException::class);
         $this->expectExceptionMessage('X-EXTERNAL-ID must not be empty');
 
-        $client->directDebitRefund(
+        $client->refundDirectDebit(
             payload: ['originalPartnerReferenceNo' => 'REF-1'],
             externalId: '   ',
             accessToken: 'token-123',
@@ -71,7 +71,7 @@ final class SnapBiClientTest extends TestCase
         $transport->pushResponse(new HttpResponse(200, '{"responseCode":"4045401","responseMessage":"Transaction Not Found"}'));
 
         try {
-            $this->client($transport)->directDebitStatus(
+            $this->client($transport)->getDirectDebitStatus(
                 payload: ['originalPartnerReferenceNo' => 'REF-1'],
                 externalId: 'EXT-2',
                 accessToken: 'token-123',
