@@ -24,10 +24,20 @@ final class MidtransClient
         '/v2/pay/account',
     ];
 
+    /**
+     * Headers the SDK derives itself; letting a caller replace them would either
+     * leak or break authentication.
+     */
+    private const RESERVED_HEADERS = ['authorization', 'idempotency-key'];
+
+    /**
+     * @param  array<string, string>  $headers
+     */
     public function __construct(
         private readonly MidtransConfig $config,
         private readonly Transport $transport = new CurlTransport,
         private readonly ?string $idempotencyKey = null,
+        private readonly array $headers = [],
     ) {}
 
     public function withIdempotencyKey(string $idempotencyKey): self
@@ -36,6 +46,38 @@ final class MidtransClient
             config: $this->config,
             transport: $this->transport,
             idempotencyKey: $idempotencyKey,
+            headers: $this->headers,
+        );
+    }
+
+    /**
+     * Returns a client that adds these headers to every request.
+     *
+     * Midtrans occasionally asks merchants to pass a header the SDK does not
+     * model, such as `transaction-source: SNAP_API` to make the status endpoint
+     * report the merchant order_id for a DANA transaction.
+     *
+     * @param  array<string, string>  $headers
+     *
+     * @see https://github.com/Midtrans/midtrans-php/issues/113
+     */
+    public function withHeaders(array $headers): self
+    {
+        foreach (array_keys($headers) as $name) {
+            if (in_array(strtolower((string) $name), self::RESERVED_HEADERS, true)) {
+                throw new MidtransException(sprintf(
+                    'The %s header is derived from your configuration and cannot be overridden. '
+                    .'Use withIdempotencyKey() to control the idempotency key.',
+                    $name,
+                ));
+            }
+        }
+
+        return new self(
+            config: $this->config,
+            transport: $this->transport,
+            idempotencyKey: $this->idempotencyKey,
+            headers: array_merge($this->headers, $headers),
         );
     }
 
@@ -388,6 +430,10 @@ final class MidtransClient
         if ($this->config->popId !== null) {
             $headers['X-POP-ID'] = $this->config->popId;
         }
+
+        // Applied after the defaults so a caller can override things like the
+        // User-Agent; Authorization and Idempotency-Key are rejected up front.
+        $headers = array_merge($headers, $this->headers);
 
         $idempotencyKey = $this->resolveIdempotencyKey($method, $url);
 

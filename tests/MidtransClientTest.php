@@ -386,4 +386,65 @@ final class MidtransClientTest extends TestCase
         self::assertSame('DELETE', $transport->requests[1]['method']);
         self::assertSame(2, $transport->requests[1]['maxRetries'], 'DELETE is idempotent by definition');
     }
+
+    public function test_custom_headers_are_sent_and_the_client_stays_immutable(): void
+    {
+        $transport = new FakeTransport;
+        $base = new MidtransClient(
+            config: new MidtransConfig(serverKey: 'sb-key', maxRetries: 0),
+            transport: $transport,
+        );
+
+        // The workaround Midtrans gives for DANA order_id mismatches.
+        $base->withHeaders(['transaction-source' => 'SNAP_API'])->getTransactionStatus('ORDER-1');
+        $base->getTransactionStatus('ORDER-2');
+
+        self::assertSame('SNAP_API', $transport->requests[0]['headers']['transaction-source']);
+        self::assertArrayNotHasKey('transaction-source', $transport->requests[1]['headers']);
+    }
+
+    public function test_custom_headers_accumulate_and_survive_an_idempotency_key(): void
+    {
+        $transport = new FakeTransport;
+
+        (new MidtransClient(
+            config: new MidtransConfig(serverKey: 'sb-key', maxRetries: 0),
+            transport: $transport,
+        ))
+            ->withHeaders(['X-One' => '1'])
+            ->withHeaders(['X-Two' => '2'])
+            ->withIdempotencyKey('idem-9')
+            ->chargeTransaction(['payment_type' => 'gopay']);
+
+        $headers = $transport->requests[0]['headers'];
+
+        self::assertSame('1', $headers['X-One']);
+        self::assertSame('2', $headers['X-Two']);
+        self::assertSame('idem-9', $headers['Idempotency-Key']);
+    }
+
+    public function test_credential_headers_cannot_be_overridden(): void
+    {
+        $client = new MidtransClient(
+            config: new MidtransConfig(serverKey: 'sb-key'),
+            transport: new FakeTransport,
+        );
+
+        $this->expectException(MidtransException::class);
+        $this->expectExceptionMessage('cannot be overridden');
+
+        $client->withHeaders(['Authorization' => 'Basic stolen']);
+    }
+
+    public function test_a_custom_header_may_replace_a_default_one(): void
+    {
+        $transport = new FakeTransport;
+
+        (new MidtransClient(
+            config: new MidtransConfig(serverKey: 'sb-key', maxRetries: 0),
+            transport: $transport,
+        ))->withHeaders(['User-Agent' => 'my-app/2.0'])->getTransactionStatus('ORDER-1');
+
+        self::assertSame('my-app/2.0', $transport->requests[0]['headers']['User-Agent']);
+    }
 }

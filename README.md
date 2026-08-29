@@ -222,6 +222,21 @@ Endpoint core lain yang tersedia:
 - `cancelSnapSession()` — batalkan halaman Snap sebelum expiry
 - `getSnapPreferences()` / `updateSnapPreferences()` — Snap Preference API v3
 
+Kalau Midtrans meminta header yang belum dimodelkan SDK, pakai `withHeaders()`:
+
+```php
+<?php
+
+// Workaround resmi untuk order_id DANA yang tidak cocok antara notifikasi
+// dan endpoint /status (Midtrans/midtrans-php#113).
+$status = $client
+    ->withHeaders(['transaction-source' => 'SNAP_API'])
+    ->getTransactionStatus('ORDER-1001');
+```
+
+Header `Authorization` dan `Idempotency-Key` diturunkan dari konfigurasi dan
+ditolak kalau dicoba di-override; pakai `withIdempotencyKey()` untuk yang kedua.
+
 > **Refund bisa ditolak.** Sejak 16 Maret 2026 skema kartu mewajibkan otorisasi
 > real-time ke issuing bank untuk refund, jadi request refund bisa berstatus
 > `deny` sama seperti charge. Tangani status itu, jangan asumsikan refund selalu
