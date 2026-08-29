@@ -369,9 +369,9 @@ Method Snap-BI yang tersedia:
 - create/status/cancel/refund untuk Direct Debit
 - create/status/cancel untuk VA
 - create/status/cancel/refund untuk QRIS
-- `bindAccount()` / `unbindAccount()` / `accountBindingInquiry()` — account linking
-- `authCapture()` / `authVoid()` — pre-authorization
-- `transactionHistoryList()` / `transactionHistoryDetail()` — reporting
+- `bindAccount()` / `unbindAccount()` / `getAccountBindingStatus()` — account linking
+- `captureAuthorization()` / `voidAuthorization()` — pre-authorization
+- `getTransactionHistoryList()` / `getTransactionHistoryDetail()` — reporting
 
 `X-EXTERNAL-ID` adalah satu-satunya proteksi replay yang ditawarkan Snap-BI
 (unik per request, TTL 24 jam). Pakai `ExternalId::generate()` untuk membuatnya,
@@ -571,10 +571,24 @@ tertinggal gagal keras di tempatnya, bukan diam-diam.
 | `cardToken()` | `getCardToken()` |
 | `cardPointInquiry()` | `getCardPointInquiry()` |
 
+`SnapBiClient` kena hal yang sama — `createDirectDebit()` berdampingan dengan
+`directDebitStatus()`:
+
+| 1.x | 2.0 |
+|---|---|
+| `directDebitStatus()` | `getDirectDebitStatus()` |
+| `vaStatus()` | `getVaStatus()` |
+| `qrisStatus()` | `getQrisStatus()` |
+| `directDebitCancel()` | `cancelDirectDebit()` |
+| `vaCancel()` | `cancelVa()` |
+| `qrisCancel()` | `cancelQris()` |
+| `directDebitRefund()` | `refundDirectDebit()` |
+| `qrisRefund()` | `refundQris()` |
+
 Cari sisa pemakaian dengan:
 
 ```bash
-grep -rnE '\->(snapCreateTransaction|coreCharge|transactionStatusB2b|transactionStatus|cardRegister|cardToken|cardPointInquiry)\(' app src
+grep -rnE '\->(snapCreateTransaction|coreCharge|transactionStatusB2b|transactionStatus|cardRegister|cardToken|cardPointInquiry|directDebitStatus|vaStatus|qrisStatus|directDebitCancel|vaCancel|qrisCancel|directDebitRefund|qrisRefund)\(' app src
 ```
 
 ### Perubahan perilaku

@@ -83,49 +83,49 @@ final class SnapBiClient
     }
 
     /** @param array<string, mixed> $payload */
-    public function directDebitStatus(array $payload, string $externalId, ?string $accessToken = null): array
+    public function getDirectDebitStatus(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::DEBIT_STATUS, $payload, $externalId, $accessToken);
     }
 
     /** @param array<string, mixed> $payload */
-    public function vaStatus(array $payload, string $externalId, ?string $accessToken = null): array
+    public function getVaStatus(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::VA_STATUS, $payload, $externalId, $accessToken);
     }
 
     /** @param array<string, mixed> $payload */
-    public function qrisStatus(array $payload, string $externalId, ?string $accessToken = null): array
+    public function getQrisStatus(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::QRIS_STATUS, $payload, $externalId, $accessToken);
     }
 
     /** @param array<string, mixed> $payload */
-    public function directDebitCancel(array $payload, string $externalId, ?string $accessToken = null): array
+    public function cancelDirectDebit(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::DEBIT_CANCEL, $payload, $externalId, $accessToken);
     }
 
     /** @param array<string, mixed> $payload */
-    public function vaCancel(array $payload, string $externalId, ?string $accessToken = null): array
+    public function cancelVa(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::VA_CANCEL, $payload, $externalId, $accessToken);
     }
 
     /** @param array<string, mixed> $payload */
-    public function qrisCancel(array $payload, string $externalId, ?string $accessToken = null): array
+    public function cancelQris(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::QRIS_CANCEL, $payload, $externalId, $accessToken);
     }
 
     /** @param array<string, mixed> $payload */
-    public function directDebitRefund(array $payload, string $externalId, ?string $accessToken = null): array
+    public function refundDirectDebit(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::DEBIT_REFUND, $payload, $externalId, $accessToken);
     }
 
     /** @param array<string, mixed> $payload */
-    public function qrisRefund(array $payload, string $externalId, ?string $accessToken = null): array
+    public function refundQris(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::QRIS_REFUND, $payload, $externalId, $accessToken);
     }
@@ -160,7 +160,7 @@ final class SnapBiClient
      *
      * @see https://docs.midtrans.com/reference/binding-inquiry-api
      */
-    public function accountBindingInquiry(array $payload, string $externalId, ?string $accessToken = null): array
+    public function getAccountBindingStatus(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::ACCOUNT_INQUIRY, $payload, $externalId, $accessToken);
     }
@@ -173,7 +173,7 @@ final class SnapBiClient
      *
      * @see https://docs.midtrans.com/reference/auth-payment-api-gopay-tokenization
      */
-    public function authCapture(array $payload, string $externalId, ?string $accessToken = null): array
+    public function captureAuthorization(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::AUTH_CAPTURE, $payload, $externalId, $accessToken);
     }
@@ -186,7 +186,7 @@ final class SnapBiClient
      *
      * @see https://docs.midtrans.com/reference/cancel-api
      */
-    public function authVoid(array $payload, string $externalId, ?string $accessToken = null): array
+    public function voidAuthorization(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::AUTH_VOID, $payload, $externalId, $accessToken);
     }
@@ -197,7 +197,7 @@ final class SnapBiClient
      *
      * @see https://docs.midtrans.com/reference/transaction-history-list-api
      */
-    public function transactionHistoryList(array $payload, string $externalId, ?string $accessToken = null): array
+    public function getTransactionHistoryList(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::TRANSACTION_HISTORY_LIST, $payload, $externalId, $accessToken);
     }
@@ -208,7 +208,7 @@ final class SnapBiClient
      *
      * @see https://docs.midtrans.com/reference/transaction-history-detail-api
      */
-    public function transactionHistoryDetail(array $payload, string $externalId, ?string $accessToken = null): array
+    public function getTransactionHistoryDetail(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::TRANSACTION_HISTORY_DETAIL, $payload, $externalId, $accessToken);
     }
