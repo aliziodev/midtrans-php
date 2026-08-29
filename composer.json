@@ -1,13 +1,17 @@
 {
   "name": "aliziodev/midtrans-php",
-  "description": "Unofficial PHP SDK for Midtrans API (Snap, Core API, Subscriptions, and webhook utilities).",
+  "description": "Unofficial PHP SDK for Midtrans API (Snap, Core API, Subscriptions, Payment Link, Invoicing, Snap-BI, and webhook utilities) with retry and idempotency hardening.",
   "type": "library",
   "license": "MIT",
   "keywords": [
     "midtrans",
     "payments",
     "php-sdk",
-    "unofficial"
+    "unofficial",
+    "snap",
+    "snap-bi",
+    "qris",
+    "payment-gateway"
   ],
   "authors": [
     {
@@ -18,7 +22,8 @@
   "require": {
     "php": "^8.2",
     "ext-curl": "*",
-    "ext-json": "*"
+    "ext-json": "*",
+    "ext-openssl": "*"
   },
   "require-dev": {
     "phpunit/phpunit": "^11.5",
