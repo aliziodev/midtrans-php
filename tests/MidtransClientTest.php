@@ -24,8 +24,8 @@ final class MidtransClientTest extends TestCase
             transport: $transport,
         );
 
-        $client->coreCharge(['transaction_details' => ['order_id' => 'ORDER-A', 'gross_amount' => 10000]]);
-        $client->coreCharge(['transaction_details' => ['order_id' => 'ORDER-B', 'gross_amount' => 99999]]);
+        $client->chargeTransaction(['transaction_details' => ['order_id' => 'ORDER-A', 'gross_amount' => 10000]]);
+        $client->chargeTransaction(['transaction_details' => ['order_id' => 'ORDER-B', 'gross_amount' => 99999]]);
 
         $first = $transport->requests[0]['headers']['Idempotency-Key'];
         $second = $transport->requests[1]['headers']['Idempotency-Key'];
@@ -49,7 +49,7 @@ final class MidtransClientTest extends TestCase
 
         $client->linkPaymentAccount(['payment_type' => 'gopay']);
         $client->unlinkPaymentAccount('acc-1');
-        $client->cardToken('4811111111111114', '12', '2029', '123');
+        $client->getCardToken('4811111111111114', '12', '2029', '123');
 
         foreach ($transport->requests as $request) {
             self::assertArrayNotHasKey('Idempotency-Key', $request['headers'], $request['url']);
@@ -65,8 +65,8 @@ final class MidtransClientTest extends TestCase
         );
 
         $client->linkPaymentAccount(['payment_type' => 'gopay']);
-        $client->coreCharge(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
-        $client->transactionStatus('ORDER-1');
+        $client->chargeTransaction(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
+        $client->getTransactionStatus('ORDER-1');
 
         self::assertSame(0, $transport->requests[0]['maxRetries'], '/v2/pay/account has no server-side replay guard');
         self::assertSame(3, $transport->requests[1]['maxRetries'], 'charge carries an Idempotency-Key');
@@ -81,7 +81,7 @@ final class MidtransClientTest extends TestCase
             transport: $transport,
         ))->withIdempotencyKey('idem-123');
 
-        $client->coreCharge(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
+        $client->chargeTransaction(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
 
         self::assertSame('idem-123', $transport->requests[0]['headers']['Idempotency-Key']);
         self::assertSame('https://api.sandbox.midtrans.com/v2/charge', $transport->requests[0]['url']);
@@ -96,7 +96,7 @@ final class MidtransClientTest extends TestCase
 
         $this->expectException(MidtransException::class);
 
-        $client->coreCharge(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
+        $client->chargeTransaction(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
     }
 
     public function test_refund_requires_refund_key_when_retries_are_enabled(): void
@@ -150,7 +150,7 @@ final class MidtransClientTest extends TestCase
 
         $this->expectException(MidtransPendingException::class);
 
-        $client->coreCharge(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
+        $client->chargeTransaction(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
     }
 
     public function test_error_status_code_in_a_200_body_is_surfaced(): void
@@ -164,7 +164,7 @@ final class MidtransClientTest extends TestCase
         );
 
         try {
-            $client->coreCharge(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
+            $client->chargeTransaction(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
             self::fail('Expected MidtransApiException was not thrown');
         } catch (MidtransApiException $exception) {
             self::assertSame(402, $exception->statusCode);
@@ -182,7 +182,7 @@ final class MidtransClientTest extends TestCase
             transport: $transport,
         );
 
-        self::assertSame('expire', $client->transactionStatus('ORDER-1')['transaction_status']);
+        self::assertSame('expire', $client->getTransactionStatus('ORDER-1')['transaction_status']);
     }
 
     public function test_requests_carry_sdk_user_agent_and_configured_notification_headers(): void
@@ -200,7 +200,7 @@ final class MidtransClientTest extends TestCase
             transport: $transport,
         );
 
-        $client->transactionStatus('ORDER-1');
+        $client->getTransactionStatus('ORDER-1');
         $headers = $transport->requests[0]['headers'];
 
         self::assertStringStartsWith('aliziodev-midtrans-php/', $headers['User-Agent']);
@@ -218,7 +218,7 @@ final class MidtransClientTest extends TestCase
             transport: $transport,
         );
 
-        $client->transactionStatusB2b('ORDER-1');
+        $client->getTransactionStatusB2b('ORDER-1');
 
         self::assertSame('GET', $transport->requests[0]['method']);
         self::assertStringContainsString('/v2/ORDER-1/status/b2b', $transport->requests[0]['url']);
@@ -248,7 +248,7 @@ final class MidtransClientTest extends TestCase
         );
 
         try {
-            $client->coreCharge(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
+            $client->chargeTransaction(['transaction_details' => ['order_id' => '1', 'gross_amount' => 10000]]);
             self::fail('Expected MidtransApiException was not thrown');
         } catch (MidtransApiException $exception) {
             self::assertSame(422, $exception->statusCode);
@@ -282,7 +282,7 @@ final class MidtransClientTest extends TestCase
         $this->expectException(MidtransException::class);
         $this->expectExceptionMessage('Client key is required');
 
-        $client->cardRegister('4811111111111114', '12', '2029');
+        $client->registerCard('4811111111111114', '12', '2029');
     }
 
     public function test_payment_link_endpoints_are_mapped_correctly(): void
