@@ -349,4 +349,41 @@ final class MidtransClientTest extends TestCase
         self::assertSame('PATCH', $transport->requests[2]['method']);
         self::assertSame('https://api.sandbox.midtrans.com/v1/invoices/invoice-id-1/void', $transport->requests[2]['url']);
     }
+
+    public function test_register_card_builds_the_query_from_card_and_client_key(): void
+    {
+        $transport = new FakeTransport;
+        $client = new MidtransClient(
+            config: new MidtransConfig(serverKey: 'sb-key', clientKey: 'client-key-1', maxRetries: 0),
+            transport: $transport,
+        );
+
+        $client->registerCard('4811111111111114', '12', '2029');
+
+        $url = $transport->requests[0]['url'];
+
+        self::assertSame('GET', $transport->requests[0]['method']);
+        self::assertStringStartsWith('https://api.sandbox.midtrans.com/v2/card/register?', $url);
+        self::assertStringContainsString('card_number=4811111111111114', $url);
+        self::assertStringContainsString('card_exp_month=12', $url);
+        self::assertStringContainsString('card_exp_year=2029', $url);
+        self::assertStringContainsString('client_key=client-key-1', $url);
+    }
+
+    public function test_state_setting_patch_and_delete_are_retried(): void
+    {
+        $transport = new FakeTransport;
+        $client = new MidtransClient(
+            config: new MidtransConfig(serverKey: 'sb-key', maxRetries: 2),
+            transport: $transport,
+        );
+
+        $client->voidInvoice('inv-1');
+        $client->deletePaymentLink('ORDER-1');
+
+        self::assertSame('PATCH', $transport->requests[0]['method']);
+        self::assertSame(2, $transport->requests[0]['maxRetries'], 'A void only drives terminal state');
+        self::assertSame('DELETE', $transport->requests[1]['method']);
+        self::assertSame(2, $transport->requests[1]['maxRetries'], 'DELETE is idempotent by definition');
+    }
 }

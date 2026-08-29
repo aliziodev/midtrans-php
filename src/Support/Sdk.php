@@ -25,8 +25,10 @@ final class Sdk
 
         try {
             return InstalledVersions::getPrettyVersion(self::PACKAGE) ?? self::FALLBACK_VERSION;
+            // @codeCoverageIgnoreStart
         } catch (\OutOfBoundsException) {
-            return self::FALLBACK_VERSION; // @codeCoverageIgnore
+            return self::FALLBACK_VERSION;
+            // @codeCoverageIgnoreEnd
         }
     }
 
