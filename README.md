@@ -50,14 +50,14 @@ $config = new MidtransConfig(
 
 $client = new MidtransClient($config);
 
-$snap = $client->snapCreateTransaction([
+$snap = $client->createSnapTransaction([
     'transaction_details' => [
         'order_id' => 'ORDER-1001',
         'gross_amount' => 10000,
     ],
 ]);
 
-$status = $client->transactionStatus('ORDER-1001');
+$status = $client->getTransactionStatus('ORDER-1001');
 ```
 
 ## Perbandingan Dengan SDK Official
@@ -168,7 +168,7 @@ $config = new MidtransConfig(
 
 $client = new MidtransClient($config);
 
-$transaction = $client->snapCreateTransaction([
+$transaction = $client->createSnapTransaction([
     'transaction_details' => [
         'order_id' => 'SNAP-1001',
         'gross_amount' => 10000,
@@ -198,7 +198,7 @@ $url = $client->getSnapUrl([
 $client = (new MidtransClient($config))
     ->withIdempotencyKey('idem-charge-1001');
 
-$charge = $client->coreCharge([
+$charge = $client->chargeTransaction([
     'payment_type' => 'gopay',
     'transaction_details' => [
         'order_id' => 'CORE-1001',
@@ -206,7 +206,7 @@ $charge = $client->coreCharge([
     ],
 ]);
 
-$status = $client->transactionStatus('CORE-1001');
+$status = $client->getTransactionStatus('CORE-1001');
 $cancel = $client->cancelTransaction('CORE-1001');
 ```
 
@@ -226,7 +226,7 @@ Endpoint core lain yang tersedia:
 > `deny` sama seperti charge. Tangani status itu, jangan asumsikan refund selalu
 > berhasil.
 
-> **Tokenisasi kartu: jangan dari server.** `cardToken()` dan `cardRegister()`
+> **Tokenisasi kartu: jangan dari server.** `getCardToken()` dan `registerCard()`
 > ditandai `@deprecated` sejak 2.0.0. Keduanya menaruh nomor kartu (dan CVV) di
 > query string URL dan membuat server kamu menyentuh data kartu mentah — itu
 > menarik aplikasi ke scope PCI-DSS SAQ D, dan URL tercatat di log web server,
@@ -430,7 +430,7 @@ berubah jadi `[]` — sehingga notifikasi yang sah akan ditolak.
 
 > Signature valid membuktikan keaslian, bukan kebaruan. Notifikasi asli tetap
 > bisa di-replay. Selalu cek ulang transaksi lewat
-> `MidtransClient::transactionStatus()` sebelum melepas barang atau layanan.
+> `MidtransClient::getTransactionStatus()` sebelum melepas barang atau layanan.
 
 ## Error Handling
 
@@ -499,8 +499,8 @@ $config = new MidtransConfig(
 $client = new MidtransClient($config);
 
 // Setiap charge di bawah ini mendapat Idempotency-Key sendiri.
-$client->coreCharge($orderA);
-$client->coreCharge($orderB);
+$client->chargeTransaction($orderA);
+$client->chargeTransaction($orderB);
 ```
 
 Kalau kamu perlu mengontrol key sendiri — misalnya untuk mengulang operasi yang
@@ -553,6 +553,31 @@ $client->refundTransaction('ORDER-1001', [
 
 ## Migrasi 1.x ke 2.0
 
+### Penamaan method
+
+Sebagian method tidak mengikuti konvensi verb-first yang dipakai sisa class
+(`createInvoice`, `getSubscription`, `deletePaymentLink`). Di 2.0 semuanya
+diseragamkan. Tidak ada alias — nama lama hilang, sehingga pemakaian yang
+tertinggal gagal keras di tempatnya, bukan diam-diam.
+
+| 1.x | 2.0 |
+|---|---|
+| `snapCreateTransaction()` | `createSnapTransaction()` |
+| `coreCharge()` | `chargeTransaction()` |
+| `transactionStatus()` | `getTransactionStatus()` |
+| `transactionStatusB2b()` | `getTransactionStatusB2b()` |
+| `cardRegister()` | `registerCard()` |
+| `cardToken()` | `getCardToken()` |
+| `cardPointInquiry()` | `getCardPointInquiry()` |
+
+Cari sisa pemakaian dengan:
+
+```bash
+grep -rnE '\->(snapCreateTransaction|coreCharge|transactionStatusB2b|transactionStatus|cardRegister|cardToken|cardPointInquiry)\(' app src
+```
+
+### Perubahan perilaku
+
 | Perubahan | Aksi |
 |---|---|
 | `MidtransConfig::$defaultIdempotencyKey` dihapus | Hapus argumennya. Kalau butuh prefix, pakai `idempotencyKeyPrefix` (maks. 13 karakter). Key kini di-generate per request |
@@ -561,7 +586,7 @@ $client->refundTransaction('ORDER-1001', [
 | Refund tanpa `refund_key` melempar exception saat retry aktif | Tambahkan `refund_key` yang stabil, atau set `maxRetries: 0` |
 | HTTP 202 kini melempar `MidtransPendingException` | Tangkap exception itu dan ulangi dengan key yang sama |
 | Respons 2xx dengan `status_code` ≥ 401 (atau `responseCode` non-2xx di Snap-BI) kini melempar `MidtransApiException` | Hilangkan pengecekan `status_code` manual di sisi aplikasi |
-| `cardToken()` / `cardRegister()` `@deprecated` | Pindah ke tokenisasi sisi browser |
+| `getCardToken()` / `registerCard()` `@deprecated` | Pindah ke tokenisasi sisi browser |
 | Transport error pada percobaan terakhir melempar `MidtransException` alih-alih mengembalikan respons 5xx dari percobaan sebelumnya | Tangkap `MidtransException` |
 
 `HttpResponse` sekarang punya parameter ketiga opsional `$headers`; implementasi
@@ -581,7 +606,7 @@ composer qa
 - Optional PSR-18 transport adapter
 - PSR-3 logger hook untuk audit trail request/response
 - Integrasi test yang lebih luas untuk skenario sandbox
-- Hapus `cardToken()` / `cardRegister()` di 3.0.0
+- Hapus `getCardToken()` / `registerCard()` di 3.0.0
 
 ## Catatan
 

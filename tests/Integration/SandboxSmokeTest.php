@@ -34,7 +34,7 @@ final class SandboxSmokeTest extends TestCase
         ));
 
         try {
-            $response = $client->transactionStatus('SMOKE-'.bin2hex(random_bytes(6)));
+            $response = $client->getTransactionStatus('SMOKE-'.bin2hex(random_bytes(6)));
             self::assertIsArray($response);
         } catch (MidtransApiException $exception) {
             self::assertIsArray($exception->payload);

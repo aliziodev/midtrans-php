@@ -40,13 +40,13 @@ final class MidtransClient
     }
 
     /** @param array<string, mixed> $payload */
-    public function snapCreateTransaction(array $payload): array
+    public function createSnapTransaction(array $payload): array
     {
         return $this->request('POST', $this->config->snapBaseUrl().'/transactions', $payload);
     }
 
     /** @param array<string, mixed> $payload */
-    public function coreCharge(array $payload): array
+    public function chargeTransaction(array $payload): array
     {
         return $this->request('POST', $this->config->coreBaseUrl().'/v2/charge', $payload);
     }
@@ -57,12 +57,12 @@ final class MidtransClient
         return $this->request('POST', $this->config->coreBaseUrl().'/v2/capture', $payload);
     }
 
-    public function transactionStatusB2b(string $orderOrTransactionId): array
+    public function getTransactionStatusB2b(string $orderOrTransactionId): array
     {
         return $this->request('GET', $this->config->coreBaseUrl().'/v2/'.rawurlencode($orderOrTransactionId).'/status/b2b');
     }
 
-    public function transactionStatus(string $orderOrTransactionId): array
+    public function getTransactionStatus(string $orderOrTransactionId): array
     {
         return $this->request('GET', $this->config->coreBaseUrl().'/v2/'.rawurlencode($orderOrTransactionId).'/status');
     }
@@ -153,12 +153,12 @@ final class MidtransClient
 
     public function getSnapToken(array $payload): string
     {
-        return (string) ($this->snapCreateTransaction($payload)['token'] ?? '');
+        return (string) ($this->createSnapTransaction($payload)['token'] ?? '');
     }
 
     public function getSnapUrl(array $payload): string
     {
-        return (string) ($this->snapCreateTransaction($payload)['redirect_url'] ?? '');
+        return (string) ($this->createSnapTransaction($payload)['redirect_url'] ?? '');
     }
 
     /**
@@ -177,7 +177,7 @@ final class MidtransClient
      *
      * @see https://docs.midtrans.com/reference/get-token
      */
-    public function cardRegister(string $cardNumber, string $expMonth, string $expYear): array
+    public function registerCard(string $cardNumber, string $expMonth, string $expYear): array
     {
         $this->assertClientKeyPresent();
 
@@ -207,7 +207,7 @@ final class MidtransClient
      *
      * @see https://docs.midtrans.com/reference/get-token
      */
-    public function cardToken(string $cardNumber, string $expMonth, string $expYear, string $cvv): array
+    public function getCardToken(string $cardNumber, string $expMonth, string $expYear, string $cvv): array
     {
         $this->assertClientKeyPresent();
 
@@ -222,7 +222,7 @@ final class MidtransClient
         return $this->request('GET', $this->config->coreBaseUrl().'/v2/token?'.$query);
     }
 
-    public function cardPointInquiry(string $tokenId): array
+    public function getCardPointInquiry(string $tokenId): array
     {
         return $this->request('GET', $this->config->coreBaseUrl().'/v2/point_inquiry/'.rawurlencode($tokenId));
     }

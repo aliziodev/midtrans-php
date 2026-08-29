@@ -26,7 +26,7 @@ final class MidtransSignatureVerifier
      *
      * A valid signature proves authenticity, not freshness — a genuine
      * notification can be replayed. Always re-check the transaction with
-     * MidtransClient::transactionStatus() before releasing goods.
+     * MidtransClient::getTransactionStatus() before releasing goods.
      */
     public static function verifyRaw(string $rawBody, string $serverKey): bool
     {
