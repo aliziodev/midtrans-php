@@ -29,4 +29,24 @@ final class SnapBiPath
     public const QRIS_CANCEL = '/v1.0/qr/qr-mpm-cancel';
 
     public const QRIS_REFUND = '/v1.0/qr/qr-mpm-refund';
+
+    // Account linking (GoPay Tokenization)
+
+    public const ACCOUNT_BINDING = '/v1.0/registration-account-binding';
+
+    public const ACCOUNT_UNBINDING = '/v1.0/registration-account-unbinding';
+
+    public const ACCOUNT_INQUIRY = '/v1.0/registration-account-inquiry';
+
+    // Pre-authorisation
+
+    public const AUTH_CAPTURE = '/v1.0/auth/capture';
+
+    public const AUTH_VOID = '/v1.0/auth/void';
+
+    // Reporting
+
+    public const TRANSACTION_HISTORY_LIST = '/v1.0/transaction-history-list';
+
+    public const TRANSACTION_HISTORY_DETAIL = '/v1.0/transaction-history-detail';
 }
