@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/aliziodev/midtrans-php/actions/workflows/ci.yml/badge.svg)](https://github.com/aliziodev/midtrans-php/actions/workflows/ci.yml)
 [![Release](https://github.com/aliziodev/midtrans-php/actions/workflows/release.yml/badge.svg)](https://github.com/aliziodev/midtrans-php/actions/workflows/release.yml)
+[![codecov](https://codecov.io/gh/aliziodev/midtrans-php/graph/badge.svg)](https://codecov.io/gh/aliziodev/midtrans-php)
 [![Latest Stable Version](https://img.shields.io/packagist/v/aliziodev/midtrans-php.svg)](https://packagist.org/packages/aliziodev/midtrans-php)
 [![Total Downloads](https://img.shields.io/packagist/dt/aliziodev/midtrans-php)](https://packagist.org/packages/aliziodev/midtrans-php)
 [![PHP Version](https://img.shields.io/packagist/php-v/aliziodev/midtrans-php)](https://packagist.org/packages/aliziodev/midtrans-php)
