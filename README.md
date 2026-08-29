@@ -596,11 +596,25 @@ grep -rnE '\->(snapCreateTransaction|coreCharge|transactionStatusB2b|transaction
 ## Testing
 
 ```bash
-composer test:unit
-composer test:integration
+composer test:unit         # semua unit test
+composer test:integration  # smoke test sandbox, butuh MIDTRANS_SMOKE_TEST=1
+composer test:coverage     # butuh pcov atau xdebug terpasang
 composer analyse
 composer qa
 ```
+
+`CurlTransportServerTest` menjalankan `CurlTransport` terhadap server bawaan PHP
+di `127.0.0.1`, karena loop retry hanya benar-benar terbukti lewat socket asli —
+jumlah percobaan, `Retry-After` yang ditunggu, capture header, dan redirect yang
+tidak diikuti. Konsekuensinya suite jadi ~6 detik, bukan ~0,06 detik. Kalau
+sedang iterasi cepat, lewati saja:
+
+```bash
+vendor/bin/phpunit --testsuite unit --exclude-group transport
+```
+
+Coverage dilaporkan ke Codecov pada tiap push. Butuh secret `CODECOV_TOKEN` di
+repository settings.
 
 ## Roadmap
 
