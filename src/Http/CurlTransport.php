@@ -46,7 +46,9 @@ final class CurlTransport implements Transport
             $handle = curl_init($url);
 
             if (! $handle instanceof \CurlHandle) {
-                throw MidtransException::transportError('Unable to initialize cURL handle.');
+                // curl_init() only fails on a URL PHP cannot even parse, which the
+                // config-level https validation already rejects. Kept as a guard.
+                throw MidtransException::transportError('Unable to initialize cURL handle.'); // @codeCoverageIgnore
             }
 
             /** @var array<string, string> $responseHeaders */

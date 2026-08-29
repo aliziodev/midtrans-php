@@ -17,15 +17,17 @@ final class Sdk
 
     public static function version(): string
     {
-        if (class_exists(InstalledVersions::class)) {
-            try {
-                return InstalledVersions::getPrettyVersion(self::PACKAGE) ?? self::FALLBACK_VERSION;
-            } catch (\OutOfBoundsException) {
-                return self::FALLBACK_VERSION;
-            }
+        // Both fallbacks below only run when the package was vendored without
+        // Composer, which by definition cannot happen in a Composer test run.
+        if (! class_exists(InstalledVersions::class)) {
+            return self::FALLBACK_VERSION; // @codeCoverageIgnore
         }
 
-        return self::FALLBACK_VERSION;
+        try {
+            return InstalledVersions::getPrettyVersion(self::PACKAGE) ?? self::FALLBACK_VERSION;
+        } catch (\OutOfBoundsException) {
+            return self::FALLBACK_VERSION; // @codeCoverageIgnore
+        }
     }
 
     public static function userAgent(): string
