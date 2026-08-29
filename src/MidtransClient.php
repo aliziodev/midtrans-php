@@ -7,11 +7,23 @@ namespace Aliziodev\MidtransPhp;
 use Aliziodev\MidtransPhp\Config\MidtransConfig;
 use Aliziodev\MidtransPhp\Exceptions\MidtransApiException;
 use Aliziodev\MidtransPhp\Exceptions\MidtransException;
+use Aliziodev\MidtransPhp\Exceptions\MidtransPendingException;
 use Aliziodev\MidtransPhp\Http\CurlTransport;
 use Aliziodev\MidtransPhp\Http\Transport;
+use Aliziodev\MidtransPhp\Support\IdempotencyKey;
+use Aliziodev\MidtransPhp\Support\Sdk;
 
 final class MidtransClient
 {
+    /**
+     * Paths where Midtrans documents that Idempotency-Key is not accepted.
+     */
+    private const IDEMPOTENCY_UNSUPPORTED_PATHS = [
+        '/v2/token',
+        '/v2/card/register',
+        '/v2/pay/account',
+    ];
+
     public function __construct(
         private readonly MidtransConfig $config,
         private readonly Transport $transport = new CurlTransport,
@@ -78,12 +90,16 @@ final class MidtransClient
     /** @param array<string, mixed> $payload */
     public function refundTransaction(string $orderOrTransactionId, array $payload): array
     {
+        $this->assertRefundKeyPresent($payload);
+
         return $this->request('POST', $this->config->coreBaseUrl().'/v2/'.rawurlencode($orderOrTransactionId).'/refund', $payload);
     }
 
     /** @param array<string, mixed> $payload */
     public function refundTransactionDirect(string $orderOrTransactionId, array $payload): array
     {
+        $this->assertRefundKeyPresent($payload);
+
         return $this->request('POST', $this->config->coreBaseUrl().'/v2/'.rawurlencode($orderOrTransactionId).'/refund/online/direct', $payload);
     }
 
@@ -145,6 +161,22 @@ final class MidtransClient
         return (string) ($this->snapCreateTransaction($payload)['redirect_url'] ?? '');
     }
 
+    /**
+     * @deprecated since 2.0.0, to be removed in 3.0.0.
+     *
+     * PCI-DSS warning: this puts the full PAN in a URL query string and makes
+     * your server handle raw card data, which pulls it into PCI-DSS SAQ D scope.
+     * URLs are logged by web servers, proxies and APM agents.
+     *
+     * Midtrans documents tokenization as a browser-side flow: load
+     * midtrans-new-3ds.min.js with your client key and call
+     * MidtransNew3ds.getCardToken(), then send only the resulting token_id to
+     * your backend.
+     *
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/get-token
+     */
     public function cardRegister(string $cardNumber, string $expMonth, string $expYear): array
     {
         $this->assertClientKeyPresent();
@@ -159,6 +191,22 @@ final class MidtransClient
         return $this->request('GET', $this->config->coreBaseUrl().'/v2/card/register?'.$query);
     }
 
+    /**
+     * @deprecated since 2.0.0, to be removed in 3.0.0.
+     *
+     * PCI-DSS warning: this puts the full PAN and CVV in a URL query string and makes
+     * your server handle raw card data, which pulls it into PCI-DSS SAQ D scope.
+     * URLs are logged by web servers, proxies and APM agents.
+     *
+     * Midtrans documents tokenization as a browser-side flow: load
+     * midtrans-new-3ds.min.js with your client key and call
+     * MidtransNew3ds.getCardToken(), then send only the resulting token_id to
+     * your backend.
+     *
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/get-token
+     */
     public function cardToken(string $cardNumber, string $expMonth, string $expYear, string $cvv): array
     {
         $this->assertClientKeyPresent();
@@ -223,33 +271,134 @@ final class MidtransClient
     }
 
     /**
+     * Obtain card properties from the Bank Identification Number.
+     *
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/bin-api
+     */
+    public function getBin(string $binNumber): array
+    {
+        return $this->request('GET', $this->config->coreBaseUrl().'/v1/bins/'.rawurlencode($binNumber));
+    }
+
+    /**
+     * Convert a quotation document into an invoice.
+     *
+     * Only documents with document_type = quotation qualify, and only while the
+     * quotation is unexpired and not already converted.
+     *
+     * @param  array<string, mixed>  $payload  optional client overrides
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/convert-invoice
+     */
+    public function convertInvoice(string $invoiceId, array $payload = []): array
+    {
+        return $this->request(
+            'PATCH',
+            $this->config->coreBaseUrl().'/v1/invoices/'.rawurlencode($invoiceId).'/convert',
+            $payload === [] ? null : $payload,
+        );
+    }
+
+    /**
+     * Cancel a Snap page before its expiry time.
+     *
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/cancel-a-snap-session
+     */
+    public function cancelSnapSession(string $snapToken): array
+    {
+        return $this->request('POST', $this->config->snapBaseUrl().'/transactions/'.rawurlencode($snapToken).'/cancel');
+    }
+
+    /**
+     * Read the Snap Checkout look and feel plus the active payment methods.
+     *
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/snap-checkout-preference-api
+     */
+    public function getSnapPreferences(): array
+    {
+        return $this->request('GET', $this->config->snapV3BaseUrl().'/merchant-preferences');
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function updateSnapPreferences(array $payload): array
+    {
+        return $this->request('PATCH', $this->config->snapV3BaseUrl().'/merchant-preferences', $payload);
+    }
+
+    /**
+     * Promotions available for a GoPay-linked account.
+     *
+     * Pass $accountId = null for the account-agnostic listing.
+     *
+     * @return array<string, mixed>
+     *
+     * @see https://docs.midtrans.com/reference/fetch-promotion-gopay-tokenization
+     */
+    public function getGopayPromotions(?string $accountId, int|string $grossAmount, string $currency = 'IDR'): array
+    {
+        $query = http_build_query([
+            'gross_amount' => (string) $grossAmount,
+            'currency' => $currency,
+        ]);
+
+        $path = $accountId === null || $accountId === ''
+            ? '/v2/gopay/promo/'
+            : '/v2/gopay/promo/'.rawurlencode($accountId);
+
+        return $this->request('GET', $this->config->coreBaseUrl().$path.'?'.$query);
+    }
+
+    /**
      * @param  array<string, mixed>|null  $payload
      * @return array<string, mixed>
      */
     private function request(string $method, string $url, ?array $payload = null): array
     {
+        $method = strtoupper($method);
+
         $headers = [
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
             'Authorization' => 'Basic '.base64_encode($this->config->serverKey.':'),
+            'User-Agent' => Sdk::userAgent(),
         ];
 
-        if (strtoupper($method) !== 'GET') {
-            $idempotencyKey = $this->idempotencyKey ?? $this->config->defaultIdempotencyKey;
+        if ($this->config->appendNotificationUrl !== null) {
+            $headers['X-Append-Notification'] = $this->config->appendNotificationUrl;
+        }
 
-            if ($this->config->maxRetries > 0 && ($idempotencyKey === null || $idempotencyKey === '')) {
-                throw new MidtransException('Idempotency-Key is required for non-GET requests when retry is enabled.');
-            }
+        if ($this->config->overrideNotificationUrl !== null) {
+            $headers['X-Override-Notification'] = $this->config->overrideNotificationUrl;
+        }
 
-            if ($idempotencyKey !== null && $idempotencyKey !== '') {
-                $headers['Idempotency-Key'] = $idempotencyKey;
-            }
+        if ($this->config->paymentLocale !== null) {
+            $headers['X-Payment-Locale'] = $this->config->paymentLocale;
+        }
+
+        if ($this->config->popId !== null) {
+            $headers['X-POP-ID'] = $this->config->popId;
+        }
+
+        $idempotencyKey = $this->resolveIdempotencyKey($method, $url);
+
+        if ($idempotencyKey !== null) {
+            $headers['Idempotency-Key'] = $idempotencyKey;
         }
 
         $jsonBody = $payload === null ? null : json_encode($payload);
 
         if ($payload !== null && $jsonBody === false) {
-            throw MidtransException::invalidResponse('Unable to encode payload to JSON.');
+            throw new MidtransException('Unable to encode payload to JSON: '.json_last_error_msg());
         }
 
         $response = $this->transport->request(
@@ -258,7 +407,7 @@ final class MidtransClient
             headers: $headers,
             jsonBody: $jsonBody,
             timeoutSeconds: $this->config->timeoutSeconds,
-            maxRetries: $this->config->maxRetries,
+            maxRetries: $this->maxRetriesFor($method, $url),
             retryDelayMs: $this->config->retryDelayMs,
         );
 
@@ -268,17 +417,128 @@ final class MidtransClient
             throw MidtransException::invalidResponse($response->body);
         }
 
-        if ($response->statusCode >= 400) {
-            $message = (string) ($decoded['status_message'] ?? 'Midtrans API request failed.');
+        /** @var array<string, mixed> $decoded */
+        if ($response->statusCode === 202) {
+            throw new MidtransPendingException($response->statusCode, $decoded, $idempotencyKey);
+        }
 
+        if ($response->statusCode >= 400) {
             throw new MidtransApiException(
                 statusCode: $response->statusCode,
                 payload: $decoded,
-                message: $message,
+                message: (string) ($decoded['status_message'] ?? 'Midtrans API request failed.'),
+            );
+        }
+
+        // Midtrans can answer HTTP 2xx while reporting the real outcome in the
+        // body, so a transport-level success is not enough to call it a success.
+        $bodyStatus = isset($decoded['status_code']) ? (int) $decoded['status_code'] : 0;
+
+        if ($bodyStatus >= 401 && $bodyStatus !== 407) {
+            throw new MidtransApiException(
+                statusCode: $bodyStatus,
+                payload: $decoded,
+                message: (string) ($decoded['status_message'] ?? 'Midtrans API returned an error status_code.'),
             );
         }
 
         return $decoded;
+    }
+
+    /**
+     * Generates a fresh key per mutating request. Reusing one key across
+     * operations makes Midtrans replay the first response for all of them.
+     */
+    private function resolveIdempotencyKey(string $method, string $url): ?string
+    {
+        if (! $this->acceptsIdempotencyKey($method, $url)) {
+            return null;
+        }
+
+        if ($this->idempotencyKey !== null && $this->idempotencyKey !== '') {
+            return IdempotencyKey::assertValid($this->idempotencyKey);
+        }
+
+        return IdempotencyKey::generate($this->config->idempotencyKeyPrefix);
+    }
+
+    /**
+     * A request is only retried when a replay is provably harmless.
+     */
+    private function maxRetriesFor(string $method, string $url): int
+    {
+        $maxRetries = $this->config->maxRetries;
+
+        if ($maxRetries <= 0) {
+            return 0;
+        }
+
+        if ($method === 'GET') {
+            return $maxRetries;
+        }
+
+        // POST carrying a live Idempotency-Key: Midtrans replays the first response.
+        if ($this->acceptsIdempotencyKey($method, $url)) {
+            return $maxRetries;
+        }
+
+        // The DELETE and PATCH endpoints used here only drive terminal state
+        // (void, delete, convert); a replay repeats the same transition or is
+        // rejected as already applied.
+        if ($method === 'DELETE' || $method === 'PATCH') {
+            return $maxRetries;
+        }
+
+        // Tokenization and payment-account POSTs have no server-side replay
+        // protection, so a retry could create a second binding.
+        return 0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function assertRefundKeyPresent(array $payload): void
+    {
+        if ($this->config->maxRetries <= 0) {
+            return;
+        }
+
+        $refundKey = $payload['refund_key'] ?? null;
+
+        if (is_string($refundKey) && trim($refundKey) !== '') {
+            return;
+        }
+
+        throw new MidtransException(
+            'refund_key is required when retries are enabled. Midtrans treats a refund without '
+            .'refund_key as a new refund, and the Idempotency-Key header only protects a five-minute '
+            .'window, so a retry can refund twice. Pass a stable refund_key or set maxRetries: 0.'
+        );
+    }
+
+    /**
+     * Midtrans honours Idempotency-Key on POST only, and never on the tokenization
+     * or payment-account endpoints.
+     *
+     * @see https://docs.midtrans.com/reference/api-headers
+     */
+    private function acceptsIdempotencyKey(string $method, string $url): bool
+    {
+        if ($method !== 'POST') {
+            return false;
+        }
+
+        // Matched anywhere in the path, not just at the start: a base URL
+        // override may prefix these with a proxy path.
+        $path = (string) parse_url($url, PHP_URL_PATH);
+
+        foreach (self::IDEMPOTENCY_UNSUPPORTED_PATHS as $unsupported) {
+            if (str_contains($path, $unsupported)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function assertClientKeyPresent(): void
