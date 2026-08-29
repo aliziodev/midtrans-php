@@ -43,6 +43,7 @@
     "test": "phpunit",
     "test:unit": "phpunit --testsuite unit",
     "test:integration": "phpunit --testsuite integration",
+    "test:coverage": "phpunit --testsuite unit --coverage-text --coverage-clover=coverage.xml",
     "analyse": "phpstan analyse --memory-limit=256M",
     "qa": [
       "composer validate --strict",

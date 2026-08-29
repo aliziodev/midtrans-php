@@ -29,4 +29,20 @@ final class MidtransExceptionTest extends TestCase
     {
         self::assertStringContainsString('<empty body>', MidtransException::invalidResponse('   ')->getMessage());
     }
+
+    public function test_transport_error_is_prefixed(): void
+    {
+        $exception = MidtransException::transportError('Connection timed out after 30000 ms');
+
+        self::assertStringStartsWith('Midtrans transport error: ', $exception->getMessage());
+        self::assertStringContainsString('Connection timed out', $exception->getMessage());
+    }
+
+    public function test_excerpt_collapses_whitespace(): void
+    {
+        self::assertSame('{ "a": 1 }', MidtransException::excerpt("{
+  \"a\":   1
+}
+"));
+    }
 }
