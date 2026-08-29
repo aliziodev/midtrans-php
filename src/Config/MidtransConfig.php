@@ -175,6 +175,6 @@ final class MidtransConfig
 
         return strlen($value) <= 8
             ? '[redacted]'
-            : substr($value, 0, 4).'…[redacted]';
+            : MidtransException::truncateUtf8($value, 4).'…[redacted]';
     }
 }

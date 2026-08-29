@@ -40,9 +40,31 @@ final class MidtransExceptionTest extends TestCase
 
     public function test_excerpt_collapses_whitespace(): void
     {
-        self::assertSame('{ "a": 1 }', MidtransException::excerpt("{
-  \"a\":   1
-}
-"));
+        self::assertSame('{ "a": 1 }', MidtransException::excerpt("{\n  \"a\":   1\n}\n"));
+    }
+
+    /**
+     * The failure mode reported against the official SDK in Midtrans/midtrans-php#91:
+     * a byte-wise cut lands in the middle of a multibyte character, json_encode()
+     * returns false for the result, and a JSON log formatter drops the line —
+     * exactly when the log was needed most.
+     */
+    public function test_truncation_never_produces_invalid_utf8(): void
+    {
+        $message = MidtransException::invalidResponse(str_repeat('制', 100))->getMessage();
+
+        self::assertSame(1, preg_match('//u', $message), 'The message must stay valid UTF-8');
+        self::assertNotFalse(
+            json_encode(['message' => $message]),
+            'A JSON log formatter must be able to encode it',
+        );
+        self::assertStringContainsString('bytes truncated', $message);
+    }
+
+    public function test_truncate_utf8_keeps_whole_characters(): void
+    {
+        self::assertSame('abc', MidtransException::truncateUtf8('abcdef', 3));
+        self::assertSame('', MidtransException::truncateUtf8('制', 2), 'Half a character is dropped entirely');
+        self::assertSame('制', MidtransException::truncateUtf8('制制', 4));
     }
 }

@@ -38,7 +38,26 @@ class MidtransException extends RuntimeException
             return $body;
         }
 
-        return substr($body, 0, self::MAX_BODY_EXCERPT).sprintf('... [%d bytes truncated]', strlen($body) - self::MAX_BODY_EXCERPT);
+        return self::truncateUtf8($body, self::MAX_BODY_EXCERPT)
+            .sprintf('... [%d bytes truncated]', strlen($body) - self::MAX_BODY_EXCERPT);
+    }
+
+    /**
+     * substr() cuts bytes rather than characters, so it can split a multibyte
+     * character in half and leave the message invalid UTF-8. json_encode() then
+     * returns false for it, and a JSON log formatter drops the line — exactly
+     * when the log was needed most.
+     */
+    public static function truncateUtf8(string $value, int $maxBytes): string
+    {
+        $cut = substr($value, 0, $maxBytes);
+
+        // At most three bytes are ever shaved off: the longest UTF-8 tail.
+        while ($cut !== '' && preg_match('//u', $cut) !== 1) {
+            $cut = substr($cut, 0, -1);
+        }
+
+        return $cut;
     }
 
     private static function redact(string $body): string
