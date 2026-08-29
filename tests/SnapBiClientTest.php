@@ -157,6 +157,50 @@ final class SnapBiClientTest extends TestCase
         $this->client($transport)->createDirectDebit(['partnerReferenceNo' => 'R1'], ExternalId::generate());
     }
 
+    public function test_an_http_error_response_is_mapped_to_an_api_exception(): void
+    {
+        $transport = new FakeTransport;
+        $transport->pushResponse(new HttpResponse(404, '{"responseCode":"4045401","responseMessage":"Transaction Not Found"}'));
+
+        try {
+            $this->client($transport)->getVaStatus(['partnerServiceId' => '1'], 'EXT-9', 'token-1');
+            self::fail('Expected MidtransApiException was not thrown');
+        } catch (MidtransApiException $exception) {
+            self::assertSame(404, $exception->statusCode);
+            self::assertSame('Transaction Not Found', $exception->getMessage());
+        }
+    }
+
+    public function test_an_http_error_without_a_response_message_falls_back(): void
+    {
+        $transport = new FakeTransport;
+        $transport->pushResponse(new HttpResponse(500, '{"something":"else"}'));
+
+        try {
+            $this->client($transport)->cancelVa(['partnerServiceId' => '1'], 'EXT-10', 'token-1');
+            self::fail('Expected MidtransApiException was not thrown');
+        } catch (MidtransApiException $exception) {
+            self::assertSame(500, $exception->statusCode);
+            self::assertStringContainsString('Snap-BI API request failed', $exception->getMessage());
+        }
+    }
+
+    public function test_a_token_without_an_expiry_is_not_cached(): void
+    {
+        $transport = new FakeTransport;
+        $transport->pushResponse(new HttpResponse(200, '{"accessToken":"tok-1"}'));
+        $transport->pushResponse(new HttpResponse(200, '{"responseCode":"2005400"}'));
+        $transport->pushResponse(new HttpResponse(200, '{"accessToken":"tok-2","expiresIn":"900"}'));
+        $transport->pushResponse(new HttpResponse(200, '{"responseCode":"2005400"}'));
+
+        $client = $this->client($transport);
+        $client->createVa(['partnerServiceId' => '1'], ExternalId::generate());
+        $client->createVa(['partnerServiceId' => '1'], ExternalId::generate());
+
+        self::assertCount(4, $transport->requests, 'Without expiresIn the token must be re-minted');
+        self::assertSame('Bearer tok-2', $transport->requests[3]['headers']['Authorization']);
+    }
+
     private function client(FakeTransport $transport): SnapBiClient
     {
         return new SnapBiClient(

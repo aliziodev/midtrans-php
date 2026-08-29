@@ -268,7 +268,10 @@ final class SnapBiClient
         $jsonBody = $payload === null ? null : json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         if ($payload !== null && $jsonBody === false) {
-            throw new MidtransException('Unable to encode Snap-BI payload to JSON: '.json_last_error_msg());
+            // Unreachable in practice: every caller has already encoded this same
+            // payload while building the signature. Kept so the method is safe
+            // for any future caller.
+            throw new MidtransException('Unable to encode Snap-BI payload to JSON: '.json_last_error_msg()); // @codeCoverageIgnore
         }
 
         $response = $this->transport->request(
