@@ -1,3 +1,9 @@
+## [2.0.1](https://github.com/aliziodev/midtrans-php/compare/v2.0.0...v2.0.1) (2026-08-30)
+
+### Bug Fixes
+
+* **snap-bi:** point Snap-BI at its own host ([c234a3a](https://github.com/aliziodev/midtrans-php/commit/c234a3a6beb39199c1e123e93ea45462fc27d5fc))
+
 ## [2.0.0](https://github.com/aliziodev/midtrans-php/compare/v1.0.1...v2.0.0) (2026-08-29)
 
 ### ⚠ BREAKING CHANGES
