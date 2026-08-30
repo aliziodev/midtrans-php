@@ -338,8 +338,11 @@ final class MidtransClient
      */
     public function convertInvoice(string $invoiceId, array $payload = []): array
     {
+        // POST, not the PATCH the documentation states: the sandbox answers 405
+        // "Method not allowed for this endpoint" to PATCH and PUT, and 200 to
+        // POST. Verified against a real quotation.
         return $this->request(
-            'PATCH',
+            'POST',
             $this->config->coreBaseUrl().'/v1/invoices/'.rawurlencode($invoiceId).'/convert',
             $payload === [] ? null : $payload,
         );

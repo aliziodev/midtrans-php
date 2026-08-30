@@ -32,7 +32,9 @@ final class NewEndpointsTest extends TestCase
         $client->convertInvoice('inv-1');
         $client->convertInvoice('inv-2', ['client' => ['email' => 'buyer@example.com']]);
 
-        self::assertSame('PATCH', $transport->requests[0]['method']);
+        // POST despite the documentation saying PATCH: the API answers 405 to
+        // PATCH and PUT, and 200 to POST.
+        self::assertSame('POST', $transport->requests[0]['method']);
         self::assertSame('https://api.sandbox.midtrans.com/v1/invoices/inv-1/convert', $transport->requests[0]['url']);
         self::assertNull($transport->requests[0]['jsonBody'], 'An empty override set must not send a body');
         self::assertSame('{"client":{"email":"buyer@example.com"}}', $transport->requests[1]['jsonBody']);
