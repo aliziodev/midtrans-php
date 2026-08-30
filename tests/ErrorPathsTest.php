@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Aliziodev\MidtransPhp\Tests;
 
 use Aliziodev\MidtransPhp\Config\MidtransConfig;
+use Aliziodev\MidtransPhp\Exceptions\MidtransApiException;
 use Aliziodev\MidtransPhp\Exceptions\MidtransException;
 use Aliziodev\MidtransPhp\Http\HttpResponse;
 use Aliziodev\MidtransPhp\MidtransClient;
@@ -213,5 +214,50 @@ final class ErrorPathsTest extends TestCase
             ),
             transport: $transport,
         );
+    }
+
+    /**
+     * Some Midtrans endpoints answer 404 with an empty body — /v2/{id}/approve
+     * and /deny do, while /cancel and /status return JSON. Reporting that as
+     * "invalid JSON response" hides the status code, which is how a wrong host
+     * stayed invisible: it looked like a malformed success rather than a 404.
+     */
+    public function test_an_unreadable_error_response_is_reported_by_its_status(): void
+    {
+        $transport = new FakeTransport;
+        $transport->pushResponse(new HttpResponse(404, ''));
+
+        try {
+            $this->coreClient($transport)->approveTransaction('ORDER-1');
+            self::fail('Expected MidtransApiException was not thrown');
+        } catch (MidtransApiException $exception) {
+            self::assertSame(404, $exception->statusCode);
+            self::assertStringContainsString('HTTP 404', $exception->getMessage());
+        }
+    }
+
+    public function test_an_unreadable_success_response_is_still_a_parse_failure(): void
+    {
+        $transport = new FakeTransport;
+        $transport->pushResponse(new HttpResponse(200, '<html>gateway</html>'));
+
+        $this->expectException(MidtransException::class);
+        $this->expectExceptionMessage('invalid JSON response');
+
+        $this->coreClient($transport)->getTransactionStatus('ORDER-1');
+    }
+
+    public function test_snap_bi_reports_an_unreadable_error_by_its_status(): void
+    {
+        $transport = new FakeTransport;
+        $transport->pushResponse(new HttpResponse(404, ''));
+
+        try {
+            $this->snapBiClient($transport)->createVa(['partnerServiceId' => '1'], 'EXT-1', 'token-1');
+            self::fail('Expected MidtransApiException was not thrown');
+        } catch (MidtransApiException $exception) {
+            self::assertSame(404, $exception->statusCode);
+            self::assertStringContainsString('HTTP 404', $exception->getMessage());
+        }
     }
 }

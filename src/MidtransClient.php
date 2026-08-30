@@ -9,6 +9,7 @@ use Aliziodev\MidtransPhp\Exceptions\MidtransApiException;
 use Aliziodev\MidtransPhp\Exceptions\MidtransException;
 use Aliziodev\MidtransPhp\Exceptions\MidtransPendingException;
 use Aliziodev\MidtransPhp\Http\CurlTransport;
+use Aliziodev\MidtransPhp\Http\HttpResponse;
 use Aliziodev\MidtransPhp\Http\Transport;
 use Aliziodev\MidtransPhp\Support\IdempotencyKey;
 use Aliziodev\MidtransPhp\Support\Sdk;
@@ -460,7 +461,7 @@ final class MidtransClient
         $decoded = json_decode($response->body, true);
 
         if (! is_array($decoded)) {
-            throw MidtransException::invalidResponse($response->body);
+            throw $this->unparseable($response);
         }
 
         /** @var array<string, mixed> $decoded */
@@ -489,6 +490,32 @@ final class MidtransClient
         }
 
         return $decoded;
+    }
+
+    /**
+     * Reports an unreadable response by its HTTP status when there is one.
+     *
+     * Some Midtrans endpoints answer 404 with an empty body — /v2/{id}/approve
+     * and /deny do, while /cancel and /status return JSON. Calling every such
+     * case "invalid JSON response" hides the status code, and a wrong host or
+     * path looks identical to a malformed success. Surfacing the status makes
+     * those diagnosable at the call site.
+     */
+    private function unparseable(HttpResponse $response): MidtransException
+    {
+        if ($response->statusCode < 400) {
+            return MidtransException::invalidResponse($response->body);
+        }
+
+        return new MidtransApiException(
+            statusCode: $response->statusCode,
+            payload: [],
+            message: sprintf(
+                'Midtrans returned HTTP %d with an unreadable body: %s',
+                $response->statusCode,
+                MidtransException::excerpt($response->body),
+            ),
+        );
     }
 
     /**
