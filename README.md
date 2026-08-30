@@ -626,11 +626,37 @@ grep -rnE '\->(snapCreateTransaction|coreCharge|transactionStatusB2b|transaction
 
 ```bash
 composer test:unit         # semua unit test
-composer test:integration  # smoke test sandbox, butuh MIDTRANS_SMOKE_TEST=1
+composer test:integration  # memanggil sandbox sungguhan, butuh .env
 composer test:coverage     # butuh pcov atau xdebug terpasang
 composer analyse
 composer qa
 ```
+
+### Suite integrasi
+
+Salin `.env.example` ke `.env`, isi kredensial sandbox, lalu jalankan. Tanpa
+`.env` suite ini di-skip, bukan gagal.
+
+Suite ini memanggil API Midtrans yang sungguhan. Itu disengaja: unit test
+membuktikan SDK menyusun request seperti yang dimaksudkan, tapi tidak
+membuktikan Midtrans setuju. Tiga bug lolos ke rilis justru karena request-nya
+dibangun persis seperti dokumentasi, dan dokumentasinya bukan yang API lakukan —
+host Snap-BI yang salah, 404 berbadan kosong yang dilaporkan sebagai gagal
+parse, dan `convertInvoice` yang memakai PATCH.
+
+Guard-nya menegaskan **host** yang dituju mengandung `sandbox`, bukan menebak
+dari bentuk key. Akun sandbox lama memakai prefiks `SB-Mid-server-`, yang baru
+memakai `Mid-server-` — bentuk yang selama ini dipakai production — jadi prefiks
+tidak lagi membedakan lingkungan.
+
+Yang sudah dijalankan terhadap sandbox sungguhan: Snap token, charge kartu dan
+VA dan GoPay, status, cancel, expire, BIN, Snap Preference v3, siklus payment
+link, siklus invoice, konversi quotation, siklus subscription penuh, pre-auth
+capture dan release, serta sepuluh endpoint Snap-BI.
+
+Belum pernah dijalankan, dan bukan karena kode: **refund** perlu diaktifkan
+Midtrans per merchant lewat pengajuan, dan **host production** tidak pernah
+disentuh sama sekali.
 
 `CurlTransportServerTest` menjalankan `CurlTransport` terhadap server bawaan PHP
 di `127.0.0.1`, karena loop retry hanya benar-benar terbukti lewat socket asli —
