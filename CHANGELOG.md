@@ -1,3 +1,9 @@
+## [2.0.3](https://github.com/aliziodev/midtrans-php/compare/v2.0.2...v2.0.3) (2026-08-30)
+
+### Bug Fixes
+
+* convert an invoice with POST, and cover the Core API business flows ([63c78b4](https://github.com/aliziodev/midtrans-php/commit/63c78b43e12dde66ce689957977eb097826b4cfd))
+
 ## [2.0.2](https://github.com/aliziodev/midtrans-php/compare/v2.0.1...v2.0.2) (2026-08-30)
 
 ### Bug Fixes
