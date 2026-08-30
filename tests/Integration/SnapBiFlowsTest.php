@@ -207,6 +207,41 @@ final class SnapBiFlowsTest extends TestCase
         }
     }
 
+    /**
+     * The detail endpoint needs both identifiers for one transaction:
+     * originalPartnerReferenceNo (ours) and additionalInfo.referenceNo
+     * (Midtrans's). Both are carried by every history entry — nested inside
+     * additionalInfo, not at the top level, which is easy to miss and makes the
+     * list look like it holds no usable reference at all.
+     *
+     * The transaction also has to have reached the history index first. A
+     * reference taken straight from a create response answers 404 Transaction
+     * Not Found for a short while, so this drives the call from the list.
+     */
+    public function test_a_transaction_from_the_history_list_can_be_read_in_detail(): void
+    {
+        $history = $this->client->getTransactionHistoryList([
+            'fromDateTime' => date('c', strtotime('-30 day')),
+            'toDateTime' => date('c'),
+        ], ExternalId::generate());
+
+        $entries = $history['detailData'] ?? [];
+
+        if ($entries === []) {
+            self::markTestSkipped('No Snap-BI transactions in the last 30 days to read back.');
+        }
+
+        $info = $entries[0]['additionalInfo'];
+
+        $detail = $this->client->getTransactionHistoryDetail([
+            'originalPartnerReferenceNo' => $info['partnerReferenceNo'],
+            'additionalInfo' => ['referenceNo' => $info['referenceNo']],
+        ], ExternalId::generate());
+
+        self::assertSame('2001300', $detail['responseCode']);
+        self::assertSame($info['referenceNo'], $detail['referenceNo']);
+    }
+
     private function reference(string $prefix): string
     {
         return $prefix.date('His').bin2hex(random_bytes(2));

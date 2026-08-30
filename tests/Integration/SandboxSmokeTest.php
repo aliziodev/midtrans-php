@@ -155,6 +155,65 @@ final class SandboxSmokeTest extends TestCase
         $this->client->refundTransaction('ANY-ORDER', ['amount' => 1000]);
     }
 
+    /**
+     * getSnapToken and getSnapUrl are thin wrappers over createSnapTransaction
+     * that return one field each. The wrappers are what most callers reach for,
+     * and neither had ever been called against the API — only the underlying
+     * createSnapTransaction had.
+     */
+    public function test_the_snap_wrappers_return_a_token_and_a_redirect_url(): void
+    {
+        $token = $this->client->getSnapToken([
+            'transaction_details' => ['order_id' => $this->orderId('SNAPTOK'), 'gross_amount' => 10000],
+        ]);
+
+        self::assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', $token);
+
+        $url = $this->client->getSnapUrl([
+            'transaction_details' => ['order_id' => $this->orderId('SNAPURL'), 'gross_amount' => 10000],
+        ]);
+
+        self::assertStringStartsWith('https://app.sandbox.midtrans.com/snap/', $url);
+    }
+
+    public function test_a_card_can_be_registered_for_one_click_reuse(): void
+    {
+        $registered = $this->client->registerCard('4811111111111114', '12', '2030');
+
+        self::assertSame('200', $registered['status_code']);
+        self::assertNotEmpty($registered['saved_token_id']);
+    }
+
+    /**
+     * The balance endpoint accepts ISO 8601 timestamps and nothing else.
+     * "2026-08-30 09:48:31", the same instant with an offset appended, and a
+     * bare "2026-08-30" are each answered with 400 Invalid date format — so the
+     * format is worth pinning rather than rediscovering.
+     */
+    public function test_balance_mutation_accepts_iso8601_timestamps(): void
+    {
+        $mutation = $this->client->getBalanceMutation(
+            'IDR',
+            date('c', strtotime('-7 day')),
+            date('c'),
+        );
+
+        self::assertSame('IDR', $mutation['currency']);
+        self::assertArrayHasKey('opening_balance_effective', $mutation);
+        self::assertArrayHasKey('wallets', $mutation);
+    }
+
+    public function test_balance_mutation_rejects_a_non_iso8601_timestamp(): void
+    {
+        $this->expectException(MidtransApiException::class);
+
+        $this->client->getBalanceMutation(
+            'IDR',
+            date('Y-m-d H:i:s', strtotime('-7 day')),
+            date('Y-m-d H:i:s'),
+        );
+    }
+
     private function orderId(string $prefix): string
     {
         return $prefix.'-'.date('YmdHis').'-'.bin2hex(random_bytes(3));

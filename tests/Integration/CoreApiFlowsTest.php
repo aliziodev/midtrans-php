@@ -195,6 +195,32 @@ final class CoreApiFlowsTest extends TestCase
         ];
     }
 
+    /**
+     * getTransactionStatusB2b reads the corporate-billing view of a
+     * transaction, so it needs a payment type that produces a bill: echannel
+     * (Mandiri Bill) does, and a card charge does not. It answers a list of
+     * B2B payment attempts rather than the single object /v2/{id}/status
+     * returns, which is the whole reason it is a separate method.
+     */
+    public function test_an_echannel_bill_can_be_read_back_as_a_b2b_status(): void
+    {
+        $orderId = $this->orderId('B2B');
+
+        $charge = $this->client->chargeTransaction([
+            'payment_type' => 'echannel',
+            'transaction_details' => ['order_id' => $orderId, 'gross_amount' => 15000],
+            'echannel' => ['bill_info1' => 'Payment For:', 'bill_info2' => 'Sandbox test'],
+        ]);
+
+        self::assertSame('201', $charge['status_code']);
+        self::assertNotEmpty($charge['bill_key']);
+        self::assertNotEmpty($charge['biller_code']);
+
+        $status = $this->client->getTransactionStatusB2b($orderId);
+
+        self::assertIsArray($status);
+    }
+
     private function orderId(string $prefix): string
     {
         return $prefix.'-'.date('YmdHis').'-'.bin2hex(random_bytes(3));
