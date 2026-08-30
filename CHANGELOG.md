@@ -1,3 +1,9 @@
+## [2.0.2](https://github.com/aliziodev/midtrans-php/compare/v2.0.1...v2.0.2) (2026-08-30)
+
+### Bug Fixes
+
+* report an unreadable error response by its HTTP status ([b0388d1](https://github.com/aliziodev/midtrans-php/commit/b0388d1cabefa86ec153ef70e2a35517109130f2))
+
 ## [2.0.1](https://github.com/aliziodev/midtrans-php/compare/v2.0.0...v2.0.1) (2026-08-30)
 
 ### Bug Fixes
