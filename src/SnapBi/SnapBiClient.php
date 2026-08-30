@@ -106,7 +106,22 @@ final class SnapBiClient
         return $this->authorizedRequest('POST', SnapBiPath::DEBIT_STATUS, $payload, $externalId, $accessToken);
     }
 
-    /** @param array<string, mixed> $payload */
+    /**
+     * inquiryRequestId is not a fresh identifier: it must be the trxId, and so
+     * the X-EXTERNAL-ID, used when the virtual account was created. A new value
+     * answers 404 "Transaction Not Found" even for an account that has been
+     * paid, and omitting it answers 400.
+     *
+     * Keep the creation trxId if you intend to query the status later; the
+     * create response also returns it as virtualAccountData.inquiryRequestId.
+     *
+     * An unpaid account answers 404. A paid one reports paymentFlagStatus "00"
+     * with a paymentFlagReason of settlement.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @see https://docs.midtrans.com/reference/virtual-account-api-bank-transfer
+     */
     public function getVaStatus(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::VA_STATUS, $payload, $externalId, $accessToken);
