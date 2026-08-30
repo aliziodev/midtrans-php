@@ -145,26 +145,62 @@ final class SnapBiFlowsTest extends TestCase
     }
 
     /**
-     * partnerServiceId is assigned by Midtrans per merchant and padded to a
-     * fixed width, so a made-up value is rejected on format. Recorded rather
-     * than skipped: the path, the access token and the HMAC signature are all
-     * exercised, and only the merchant-specific value is missing.
+     * partnerServiceId is eight characters, right aligned and space padded, and
+     * trxId has to equal the X-EXTERNAL-ID sent with it — a rule this endpoint
+     * has and QRIS and direct debit do not. Getting either wrong answers 400
+     * without naming the real problem, so both are asserted here.
      */
-    public function test_creating_a_virtual_account_needs_the_assigned_partner_service_id(): void
+    public function test_a_virtual_account_can_be_created_and_deleted(): void
     {
+        $serviceId = str_pad('70012', 8, ' ', STR_PAD_LEFT);
+        $customerNo = '628'.random_int(100000000, 999999999);
+        $externalId = ExternalId::generate();
+
+        $created = $this->client->createVa([
+            'partnerServiceId' => $serviceId,
+            'customerNo' => $customerNo,
+            'virtualAccountNo' => $serviceId.$customerNo,
+            'virtualAccountName' => 'Sandbox Tester',
+            'virtualAccountEmail' => 'sandbox@example.com',
+            // Same value as the external id: the endpoint requires it.
+            'trxId' => $externalId,
+            'totalAmount' => ['value' => '15000.00', 'currency' => 'IDR'],
+            'expiredDate' => date('c', strtotime('+1 day')),
+            'additionalInfo' => ['merchantId' => $this->partnerId, 'bank' => 'bca'],
+        ], $externalId);
+
+        self::assertSame('2002700', $created['responseCode']);
+        self::assertNotEmpty(trim((string) $created['virtualAccountData']['virtualAccountNo']));
+
+        $deleted = $this->client->cancelVa([
+            'partnerServiceId' => $serviceId,
+            'customerNo' => $customerNo,
+            'virtualAccountNo' => $serviceId.$customerNo,
+            'trxId' => $externalId,
+            'additionalInfo' => ['merchantId' => $this->partnerId],
+        ], ExternalId::generate());
+
+        self::assertSame('2003100', $deleted['responseCode']);
+    }
+
+    public function test_a_short_partner_service_id_is_rejected_on_format(): void
+    {
+        $externalId = ExternalId::generate();
+
         try {
             $this->client->createVa([
+                // Seven characters rather than eight.
                 'partnerServiceId' => '  12345',
-                'customerNo' => '00000000001',
-                'virtualAccountNo' => '  1234500000000001',
+                'customerNo' => '628123456789',
+                'virtualAccountNo' => '  12345628123456789',
                 'virtualAccountName' => 'Sandbox Tester',
-                'trxId' => $this->reference('VA'),
+                'trxId' => $externalId,
                 'totalAmount' => ['value' => '15000.00', 'currency' => 'IDR'],
-                'virtualAccountTrxType' => '1',
                 'expiredDate' => date('c', strtotime('+1 day')),
-            ], ExternalId::generate());
+                'additionalInfo' => ['merchantId' => $this->partnerId, 'bank' => 'bca'],
+            ], $externalId);
 
-            self::markTestIncomplete('createVa now succeeds: a real partnerServiceId is configured, so assert the VA instead.');
+            self::fail('Expected MidtransApiException was not thrown');
         } catch (\Aliziodev\MidtransPhp\Exceptions\MidtransApiException $exception) {
             self::assertSame(400, $exception->statusCode);
             self::assertStringContainsString('partnerServiceId', (string) $exception->payload['responseMessage']);

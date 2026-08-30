@@ -71,7 +71,24 @@ final class SnapBiClient
         return $this->authorizedRequest('POST', SnapBiPath::DEBIT_CREATE, $payload, $externalId, $accessToken);
     }
 
-    /** @param array<string, mixed> $payload */
+    /**
+     * Two constraints here are easy to miss and both answer 400 rather than
+     * naming themselves clearly:
+     *
+     * - partnerServiceId is eight characters, right aligned and space padded,
+     *   so "12345" is sent as "   12345". A shorter string is rejected as
+     *   "Invalid Field Format partnerServiceId".
+     * - trxId must equal the X-EXTERNAL-ID passed alongside it. QRIS and direct
+     *   debit have no such rule; only this endpoint does, and a mismatch is
+     *   rejected as "Invalid Mandatory Field x-external-id & trxId".
+     *
+     * virtualAccountNo is partnerServiceId followed by customerNo, keeping the
+     * padding.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @see https://docs.midtrans.com/reference/virtual-account-api-bank-transfer
+     */
     public function createVa(array $payload, string $externalId, ?string $accessToken = null): array
     {
         return $this->authorizedRequest('POST', SnapBiPath::VA_CREATE, $payload, $externalId, $accessToken);
