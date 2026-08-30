@@ -567,6 +567,11 @@ $client->refundTransaction('ORDER-1001', [
 ]);
 ```
 
+> **Belum diverifikasi hidup.** Refund harus diaktifkan Midtrans per merchant
+> sebelum endpoint-nya menjawab, jadi keempat method refund belum pernah
+> dijalankan terhadap API sungguhan — hanya unit test. Lihat
+> [Yang belum pernah diuji](#yang-belum-pernah-diuji-dan-kenapa).
+
 ## Migrasi 1.x ke 2.0
 
 ### Penamaan method
@@ -649,14 +654,53 @@ dari bentuk key. Akun sandbox lama memakai prefiks `SB-Mid-server-`, yang baru
 memakai `Mid-server-` — bentuk yang selama ini dipakai production — jadi prefiks
 tidak lagi membedakan lingkungan.
 
-Yang sudah dijalankan terhadap sandbox sungguhan: Snap token, charge kartu dan
-VA dan GoPay, status, cancel, expire, BIN, Snap Preference v3, siklus payment
-link, siklus invoice, konversi quotation, siklus subscription penuh, pre-auth
-capture dan release, serta sepuluh endpoint Snap-BI.
+Yang sudah dijalankan terhadap sandbox sungguhan: Snap token dan URL, charge
+kartu dan VA dan GoPay dan echannel, status, status B2B, cancel, expire, BIN,
+Snap Preference v3, registrasi kartu, balance mutation, siklus payment link,
+siklus invoice, konversi quotation, siklus subscription penuh, pre-auth capture
+dan release, serta sebelas endpoint Snap-BI.
 
-Belum pernah dijalankan, dan bukan karena kode: **refund** perlu diaktifkan
-Midtrans per merchant lewat pengajuan, dan **host production** tidak pernah
-disentuh sama sekali.
+### Yang belum pernah diuji, dan kenapa
+
+Dari 57 method yang menyentuh API, **41 sudah dijawab sandbox sungguhan dan 16
+belum**. Tidak satu pun karena kodenya. Tiap baris di bawah diperiksa ke
+dokumentasi resmi Midtrans, bukan disimpulkan dari pesan error.
+
+**Butuh aktivasi merchant — 13**
+
+| Method | Dasar |
+| --- | --- |
+| `refundTransaction`, `refundTransactionDirect`, `refundQris`, `refundDirectDebit` | [Introduction to Refund](https://docs.midtrans.com/docs/introduction-to-refund): *"If your refund button has not been activated, you can activate it by filling out the [form]"*. Sandbox menjawab `412`. |
+| `getCardPointInquiry` | Sandbox menjawab `402 Permission for this feature is not granted.` |
+| `captureAuthorization`, `voidAuthorization` | [Testing Payment on Sandbox](https://docs.midtrans.com/docs/testing-payment-on-sandbox): *"Please contact your sales representative to enable pre auth flow in sandbox environment."* |
+| `getGopayPromotions` | Dokumen yang sama: *"Please contact your sales representative to enable promotion in sandbox environment."* Sandbox menjawab `HTTP 500`. |
+| `getPaymentAccount`, `unlinkPaymentAccount`, `bindAccount`, `unbindAccount`, `getAccountBindingStatus` | [Testing GoPay Tokenization](https://docs.midtrans.com/reference/testing-gopay-tokenization-on-sandbox-environment): aktif otomatis bila nomor telepon dan email merchant sudah terisi, dan bila tetap tidak, *"contact their sales representative"*. Dengan profil sandbox terisi, channel tetap menjawab `102 Merchant not authorised`. |
+
+**Tidak ada cara memicunya — 2**
+
+`approveTransaction` dan `denyTransaction`. Referensi resminya menyebut keduanya
+hanya berlaku untuk *challenged transaction*
+([approve](https://docs.midtrans.com/reference/approve-transaction),
+[deny](https://docs.midtrans.com/reference/deny-transaction)), dan tidak ada satu
+pun halaman Midtrans — Testing Payment on Sandbox maupun Fraud Detection System —
+yang menerangkan cara menghasilkan `fraud_status: challenge`. Kartu
+"Denied by FDS" pun menghasilkan `transaction_status: deny` dengan
+`fraud_status: accept`, bukan challenge.
+
+**Sengaja tidak dijalankan — 1**
+
+`updateSnapPreferences` adalah `PATCH` yang mengubah pengaturan Snap merchant
+yang sungguhan. Menjalankannya sekadar untuk mencentang daftar berarti mengubah
+konfigurasi akun orang lain.
+
+**Di luar daftar method**: host production tidak pernah disentuh sama sekali, dan
+verifikasi notifikasi Snap-BI belum pernah menghadapi notifikasi asli karena
+public key Midtrans belum tersedia.
+
+Artinya, untuk Core API dan Snap — yang dipakai mayoritas — package ini terbukti
+hidup. Kalau Anda butuh refund, GoPay Tokenization, atau notifikasi Snap-BI,
+jalur itu belum pernah dibuktikan dan pantas Anda uji sendiri begitu Midtrans
+mengaktifkannya.
 
 `CurlTransportServerTest` menjalankan `CurlTransport` terhadap server bawaan PHP
 di `127.0.0.1`, karena loop retry hanya benar-benar terbukti lewat socket asli —
