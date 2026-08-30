@@ -160,10 +160,11 @@ final class CardAndSubscriptionTest extends TestCase
      * while it is still in capture — which is where a fresh charge sits until
      * the settlement batch runs — Midtrans refuses it with 412.
      *
-     * 412 covers three separate causes, all confirmed against this sandbox:
+     * 412 covers three separate causes, all confirmed against sandbox merchants:
      * an unrefundable method (bank transfer), an unsettled transaction (this
-     * test), and an account without refund permission — a settled GoPay
-     * transaction well inside its 45-day window is refused too.
+     * test), and refund not being activated on the account — a settled GoPay
+     * transaction well inside its 45-day window is refused on two independent
+     * accounts, and Midtrans documents refund as opt-in per merchant.
      *
      * @see https://docs.midtrans.com/docs/what-payment-method-that-have-refund-feature
      */

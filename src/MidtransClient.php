@@ -140,10 +140,12 @@ final class MidtransClient
      *   and over-the-counter cannot.
      * - The transaction has not settled. A card charge sits in capture until
      *   the settlement batch runs; use cancelTransaction() before then.
-     * - The merchant account is not permitted to refund. A settled, refundable
-     *   transaction inside its refund window still answers 412 when the account
-     *   lacks the feature, which is indistinguishable from the two above by
-     *   status code alone.
+     * - Refund is not activated on the merchant account. It is an opt-in
+     *   feature that Midtrans enables on request, so a settled, refundable
+     *   transaction well inside its window still answers 412 until then —
+     *   indistinguishable from the two causes above by status code alone.
+     *   Reproduced on two independent sandbox merchants; activate it at
+     *   https://midtrans.com/contact-us/transaction-information/prosedur-refund-pengembalian-dana
      *
      * Since 16 March 2026 card schemes also require real-time issuer
      * authorisation, so an accepted refund request can still come back denied.
