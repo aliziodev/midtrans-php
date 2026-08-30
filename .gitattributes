@@ -8,5 +8,6 @@
 .releaserc.json     export-ignore
 CHANGELOG.md        export-ignore
 CONTRIBUTING.md     export-ignore
+composer.lock       export-ignore
 phpstan.neon        export-ignore
 phpunit.xml         export-ignore
