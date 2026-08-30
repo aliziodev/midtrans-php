@@ -113,7 +113,7 @@ final class NewEndpointsTest extends TestCase
         $this->snapBiClient($transport)->{$method}(['partnerReferenceNo' => 'REF-1'], 'EXT-1', 'token-123');
 
         self::assertSame('POST', $transport->requests[0]['method']);
-        self::assertSame('https://api.sandbox.midtrans.com'.$expectedPath, $transport->requests[0]['url']);
+        self::assertSame('https://merchants.sbx.midtrans.com'.$expectedPath, $transport->requests[0]['url']);
         self::assertSame('EXT-1', $transport->requests[0]['headers']['X-EXTERNAL-ID']);
     }
 

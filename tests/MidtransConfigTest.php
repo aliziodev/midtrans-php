@@ -16,7 +16,7 @@ final class MidtransConfigTest extends TestCase
 
         self::assertSame('https://api.sandbox.midtrans.com', $config->coreBaseUrl());
         self::assertSame('https://app.sandbox.midtrans.com/snap/v1', $config->snapBaseUrl());
-        self::assertSame('https://api.sandbox.midtrans.com', $config->snapBiBaseUrl());
+        self::assertSame('https://merchants.sbx.midtrans.com', $config->snapBiBaseUrl());
     }
 
     public function test_production_base_urls(): void
@@ -25,7 +25,7 @@ final class MidtransConfigTest extends TestCase
 
         self::assertSame('https://api.midtrans.com', $config->coreBaseUrl());
         self::assertSame('https://app.midtrans.com/snap/v1', $config->snapBaseUrl());
-        self::assertSame('https://api.midtrans.com', $config->snapBiBaseUrl());
+        self::assertSame('https://merchants.midtrans.com', $config->snapBiBaseUrl());
     }
 
     public function test_can_override_all_base_urls(): void
@@ -115,5 +115,21 @@ MII...
             'https://app.midtrans.com/snap/v3',
             (new MidtransConfig(serverKey: 'k', isProduction: true))->snapV3BaseUrl(),
         );
+    }
+
+    /**
+     * Regression: Snap-BI used to inherit the Core API host, where every one of
+     * its paths answers 404 with an empty body.
+     *
+     * @see https://docs.midtrans.com/reference/getting-started-1
+     */
+    public function test_snap_bi_does_not_share_the_core_api_host(): void
+    {
+        foreach ([true, false] as $isProduction) {
+            $config = new MidtransConfig(serverKey: 'k', isProduction: $isProduction);
+
+            self::assertNotSame($config->coreBaseUrl(), $config->snapBiBaseUrl());
+            self::assertStringContainsString('merchants', $config->snapBiBaseUrl());
+        }
     }
 }

@@ -122,13 +122,26 @@ final class MidtransConfig
             : 'https://app.sandbox.midtrans.com/snap/v1';
     }
 
+    /**
+     * Snap-BI is served from its own host, not the Core API one.
+     *
+     * Pointing these paths at api.midtrans.com answers 404 with an empty body,
+     * which surfaces as an unparseable response rather than as a wrong host.
+     *
+     * The Get Auth Code API is the one exception, living on merchants-app.*;
+     * this SDK does not expose it, so it needs no separate base URL.
+     *
+     * @see https://docs.midtrans.com/reference/getting-started-1
+     */
     public function snapBiBaseUrl(): string
     {
         if ($this->snapBiBaseUrlOverride !== null && $this->snapBiBaseUrlOverride !== '') {
             return rtrim($this->snapBiBaseUrlOverride, '/');
         }
 
-        return $this->coreBaseUrl();
+        return $this->isProduction
+            ? 'https://merchants.midtrans.com'
+            : 'https://merchants.sbx.midtrans.com';
     }
 
     /**

@@ -24,6 +24,8 @@ final class EndpointMapTest extends TestCase
 
     private const SNAP = 'https://app.sandbox.midtrans.com/snap/v1';
 
+    private const SNAP_BI = 'https://merchants.sbx.midtrans.com';
+
     /**
      * @return array<string, array{0: \Closure, 1: string, 2: string}>
      */
@@ -126,7 +128,7 @@ final class EndpointMapTest extends TestCase
         $client->{$method}(['partnerReferenceNo' => 'REF-1'], 'EXT-1', 'token-123');
 
         self::assertSame('POST', $transport->requests[0]['method']);
-        self::assertSame(self::CORE.$expectedPath, $transport->requests[0]['url']);
+        self::assertSame(self::SNAP_BI.$expectedPath, $transport->requests[0]['url']);
     }
 
     public function test_access_token_endpoint_is_mapped(): void
@@ -149,7 +151,7 @@ final class EndpointMapTest extends TestCase
         $client->getAccessToken();
 
         self::assertSame('POST', $transport->requests[0]['method']);
-        self::assertSame(self::CORE.'/v1.0/access-token/b2b', $transport->requests[0]['url']);
+        self::assertSame(self::SNAP_BI.'/v1.0/access-token/b2b', $transport->requests[0]['url']);
         self::assertSame('client-id', $transport->requests[0]['headers']['X-CLIENT-KEY']);
         self::assertArrayHasKey('X-SIGNATURE', $transport->requests[0]['headers']);
     }
