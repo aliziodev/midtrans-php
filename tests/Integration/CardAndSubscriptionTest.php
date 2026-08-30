@@ -156,12 +156,18 @@ final class CardAndSubscriptionTest extends TestCase
     }
 
     /**
-     * Refunds are refused for this merchant account even on a settled
-     * transaction, with 412 rather than a routing error. The request is built
-     * correctly; the permission is not granted. Asserted so the day it is
-     * granted, this test starts failing and says so.
+     * A card refund needs the transaction to have reached settlement. Attempted
+     * while it is still in capture — which is where a fresh charge sits until
+     * the settlement batch runs — Midtrans refuses it with 412.
+     *
+     * 412 covers three separate causes, all confirmed against this sandbox:
+     * an unrefundable method (bank transfer), an unsettled transaction (this
+     * test), and an account without refund permission — a settled GoPay
+     * transaction well inside its 45-day window is refused too.
+     *
+     * @see https://docs.midtrans.com/docs/what-payment-method-that-have-refund-feature
      */
-    public function test_refund_is_refused_by_merchant_permission_not_by_the_client(): void
+    public function test_a_card_refund_before_settlement_is_refused(): void
     {
         $orderId = $this->orderId('CRF');
 

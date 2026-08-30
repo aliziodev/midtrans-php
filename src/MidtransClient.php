@@ -130,7 +130,30 @@ final class MidtransClient
         return $this->request('POST', $this->config->coreBaseUrl().'/v2/'.rawurlencode($orderOrTransactionId).'/expire');
     }
 
-    /** @param array<string, mixed> $payload */
+    /**
+     * Midtrans answers 412 to a refund it will not perform, and the same status
+     * covers three unrelated causes. All three were hit while testing this
+     * against a sandbox merchant, so it is worth knowing them apart:
+     *
+     * - The method cannot be refunded at all. Only credit_card, gopay,
+     *   shopeepay, dana, ovo, QRIS, kredivo and akulaku can be. Bank transfer
+     *   and over-the-counter cannot.
+     * - The transaction has not settled. A card charge sits in capture until
+     *   the settlement batch runs; use cancelTransaction() before then.
+     * - The merchant account is not permitted to refund. A settled, refundable
+     *   transaction inside its refund window still answers 412 when the account
+     *   lacks the feature, which is indistinguishable from the two above by
+     *   status code alone.
+     *
+     * Since 16 March 2026 card schemes also require real-time issuer
+     * authorisation, so an accepted refund request can still come back denied.
+     * Read the resulting status rather than assuming the money moved.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @see https://docs.midtrans.com/reference/refund-transaction
+     * @see https://docs.midtrans.com/docs/what-payment-method-that-have-refund-feature
+     */
     public function refundTransaction(string $orderOrTransactionId, array $payload): array
     {
         $this->assertRefundKeyPresent($payload);

@@ -134,6 +134,9 @@ final class CoreApiFlowsTest extends TestCase
     /**
      * Refunding money that never arrived has to be refused by Midtrans, not by
      * an optimistic client.
+     *
+     * GoPay is refundable once settled, so the refusal here is about the
+     * transaction being unpaid rather than about the method.
      */
     public function test_an_unsettled_transaction_cannot_be_refunded(): void
     {
