@@ -700,6 +700,33 @@ $transport = new FakeTransport(new HttpResponse(404, json_encode([
 Pengguna Laravel punya jalan yang lebih pendek: `Midtrans::fake()` di
 [aliziodev/laravel-midtrans](https://github.com/aliziodev/laravel-midtrans).
 
+## Skill Untuk Coding Agent
+
+Package ini menyertakan skill berformat [Agent Skills](https://agentskills.io) di
+`resources/boost/skills/midtrans-php/SKILL.md`. Isinya bukan daftar API — itu
+sudah ada di README ini — melainkan jebakan yang membuat integrasi salah: HTTP
+202 bukan hasil, satu `Idempotency-Key` tetap membuat respons order lain
+dikembalikan untuk order Anda, signature membuktikan keaslian bukan kebaruan,
+`gross_amount` harus tetap string, refund butuh `refund_key`, dan `trxId`
+Snap-BI harus sama dengan `X-EXTERNAL-ID`.
+
+Di aplikasi Laravel yang memakai [Laravel Boost](https://laravel.com/docs/boost),
+`php artisan boost:install` — atau `boost:update --discover` — menemukannya
+sendiri, selama `aliziodev/midtrans-php` memang tercantum di `composer.json`
+aplikasi. Boost hanya membaca `require` dan `require-dev` root, jadi SDK yang
+ikut sebagai dependensi `aliziodev/laravel-midtrans` tidak terlihat; untuk kasus
+itu pakai skill milik wrapper-nya, yang memang menjelaskan facade, webhook route
+dan event.
+
+Untuk memasangnya sendiri:
+
+```bash
+php artisan boost:add-skill aliziodev/midtrans-php
+```
+
+Di luar Laravel, salin saja foldernya ke direktori skill agent Anda —
+`.claude/skills/midtrans-php/` untuk Claude Code.
+
 ## Seberapa jauh package ini terbukti
 
 Package ini tidak hanya diuji dengan mock. Suite integrasinya memanggil sandbox
