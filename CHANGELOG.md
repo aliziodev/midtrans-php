@@ -1,3 +1,9 @@
+## [2.0.5](https://github.com/aliziodev/midtrans-php/compare/v2.0.4...v2.0.5) (2026-08-30)
+
+### Bug Fixes
+
+* stop shipping tests and CI configuration to consumers ([0f02ca0](https://github.com/aliziodev/midtrans-php/commit/0f02ca03e01fa2ca846cd0c4c889b0a6b36db357))
+
 ## [2.0.4](https://github.com/aliziodev/midtrans-php/compare/v2.0.3...v2.0.4) (2026-08-30)
 
 ### Bug Fixes
