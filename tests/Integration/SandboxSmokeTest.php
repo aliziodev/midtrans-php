@@ -25,7 +25,6 @@ use PHPUnit\Framework\TestCase;
 #[Group('integration')]
 final class SandboxSmokeTest extends TestCase
 {
-    private const SANDBOX_PREFIX = 'SB-Mid-server-';
 
     private MidtransClient $client;
 
@@ -33,22 +32,21 @@ final class SandboxSmokeTest extends TestCase
     {
         $serverKey = trim((string) getenv('MIDTRANS_SERVER_KEY'));
 
-        // The .env.example placeholder is the bare prefix, so an unfilled copy
-        // has to skip rather than fire requests that will only 401.
-        if ($serverKey === '' || $serverKey === self::SANDBOX_PREFIX) {
+        if ($serverKey === '') {
             self::markTestSkipped('Set MIDTRANS_SERVER_KEY in .env to run the sandbox suite.');
         }
 
-        if (! str_starts_with($serverKey, self::SANDBOX_PREFIX)) {
-            self::fail('Refusing to run: MIDTRANS_SERVER_KEY is not a sandbox key.');
-        }
 
-        $this->client = new MidtransClient(new MidtransConfig(
+        $config = new MidtransConfig(
             serverKey: $serverKey,
             clientKey: ((string) getenv('MIDTRANS_CLIENT_KEY')) ?: null,
             isProduction: false,
             maxRetries: 1,
-        ));
+        );
+
+        $this->assertSandbox($config);
+
+        $this->client = new MidtransClient($config);
     }
 
     public function test_snap_transaction_returns_a_token(): void
@@ -160,5 +158,21 @@ final class SandboxSmokeTest extends TestCase
     private function orderId(string $prefix): string
     {
         return $prefix.'-'.date('YmdHis').'-'.bin2hex(random_bytes(3));
+    }
+
+    /**
+     * Refuses to run unless the client is pointed at the sandbox host.
+     *
+     * Asserted from the resolved base URL, not from the key's prefix. Sandbox
+     * keys used to start with SB-Mid-server- and newer ones start with
+     * Mid-server-, which is what production keys have always looked like — so
+     * the prefix no longer tells the two apart. The host does, and the host is
+     * what decides whether these tests can move real money.
+     */
+    private function assertSandbox(MidtransConfig $config): void
+    {
+        if (! str_contains($config->coreBaseUrl(), 'sandbox')) {
+            self::fail('Refusing to run: the client is not pointed at the Midtrans sandbox.');
+        }
     }
 }

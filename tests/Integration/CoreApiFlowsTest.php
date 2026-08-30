@@ -22,7 +22,6 @@ use PHPUnit\Framework\TestCase;
 #[Group('integration')]
 final class CoreApiFlowsTest extends TestCase
 {
-    private const SANDBOX_PREFIX = 'SB-Mid-server-';
 
     private MidtransClient $client;
 
@@ -39,19 +38,20 @@ final class CoreApiFlowsTest extends TestCase
     {
         $serverKey = trim((string) getenv('MIDTRANS_SERVER_KEY'));
 
-        if ($serverKey === '' || $serverKey === self::SANDBOX_PREFIX) {
+        if ($serverKey === '') {
             self::markTestSkipped('Set MIDTRANS_SERVER_KEY in .env to run the sandbox suite.');
         }
 
-        if (! str_starts_with($serverKey, self::SANDBOX_PREFIX)) {
-            self::fail('Refusing to run: MIDTRANS_SERVER_KEY is not a sandbox key.');
-        }
 
-        $this->client = new MidtransClient(new MidtransConfig(
+        $config = new MidtransConfig(
             serverKey: $serverKey,
             isProduction: false,
             maxRetries: 0,
-        ));
+        );
+
+        $this->assertSandbox($config);
+
+        $this->client = new MidtransClient($config);
     }
 
     public function test_payment_link_can_be_created_read_and_deleted(): void
@@ -198,5 +198,21 @@ final class CoreApiFlowsTest extends TestCase
     private function orderId(string $prefix): string
     {
         return $prefix.'-'.date('YmdHis').'-'.bin2hex(random_bytes(3));
+    }
+
+    /**
+     * Refuses to run unless the client is pointed at the sandbox host.
+     *
+     * Asserted from the resolved base URL, not from the key's prefix. Sandbox
+     * keys used to start with SB-Mid-server- and newer ones start with
+     * Mid-server-, which is what production keys have always looked like — so
+     * the prefix no longer tells the two apart. The host does, and the host is
+     * what decides whether these tests can move real money.
+     */
+    private function assertSandbox(MidtransConfig $config): void
+    {
+        if (! str_contains($config->coreBaseUrl(), 'sandbox')) {
+            self::fail('Refusing to run: the client is not pointed at the Midtrans sandbox.');
+        }
     }
 }

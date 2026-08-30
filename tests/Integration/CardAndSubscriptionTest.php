@@ -22,7 +22,6 @@ use PHPUnit\Framework\TestCase;
 #[Group('integration')]
 final class CardAndSubscriptionTest extends TestCase
 {
-    private const SANDBOX_PREFIX = 'SB-Mid-server-';
 
     /** Midtrans's published sandbox test card. Never a real PAN. */
     private const TEST_CARD = '4811111111111114';
@@ -34,20 +33,21 @@ final class CardAndSubscriptionTest extends TestCase
         $serverKey = trim((string) getenv('MIDTRANS_SERVER_KEY'));
         $clientKey = trim((string) getenv('MIDTRANS_CLIENT_KEY'));
 
-        if ($serverKey === '' || $serverKey === self::SANDBOX_PREFIX || $clientKey === '') {
+        if ($serverKey === '' || $clientKey === '') {
             self::markTestSkipped('Set MIDTRANS_SERVER_KEY and MIDTRANS_CLIENT_KEY in .env to run this suite.');
         }
 
-        if (! str_starts_with($serverKey, self::SANDBOX_PREFIX)) {
-            self::fail('Refusing to run: MIDTRANS_SERVER_KEY is not a sandbox key.');
-        }
 
-        $this->client = new MidtransClient(new MidtransConfig(
+        $config = new MidtransConfig(
             serverKey: $serverKey,
             clientKey: $clientKey,
             isProduction: false,
             maxRetries: 0,
-        ));
+        );
+
+        $this->assertSandbox($config);
+
+        $this->client = new MidtransClient($config);
     }
 
     public function test_a_card_charge_can_save_a_token_for_later_use(): void
@@ -211,5 +211,21 @@ final class CardAndSubscriptionTest extends TestCase
     private function orderId(string $prefix): string
     {
         return $prefix.'-'.date('YmdHis').'-'.bin2hex(random_bytes(3));
+    }
+
+    /**
+     * Refuses to run unless the client is pointed at the sandbox host.
+     *
+     * Asserted from the resolved base URL, not from the key's prefix. Sandbox
+     * keys used to start with SB-Mid-server- and newer ones start with
+     * Mid-server-, which is what production keys have always looked like — so
+     * the prefix no longer tells the two apart. The host does, and the host is
+     * what decides whether these tests can move real money.
+     */
+    private function assertSandbox(MidtransConfig $config): void
+    {
+        if (! str_contains($config->coreBaseUrl(), 'sandbox')) {
+            self::fail('Refusing to run: the client is not pointed at the Midtrans sandbox.');
+        }
     }
 }
