@@ -570,7 +570,7 @@ $client->refundTransaction('ORDER-1001', [
 > **Belum diverifikasi hidup.** Refund harus diaktifkan Midtrans per merchant
 > sebelum endpoint-nya menjawab, jadi keempat method refund belum pernah
 > dijalankan terhadap API sungguhan — hanya unit test. Lihat
-> [Yang belum pernah diuji](#yang-belum-pernah-diuji-dan-kenapa).
+> [Seberapa jauh package ini terbukti](#seberapa-jauh-package-ini-terbukti).
 
 ## Migrasi 1.x ke 2.0
 
@@ -627,93 +627,108 @@ grep -rnE '\->(snapCreateTransaction|coreCharge|transactionStatusB2b|transaction
 `HttpResponse` sekarang punya parameter ketiga opsional `$headers`; implementasi
 `Transport` kustom tetap kompatibel tanpa perubahan.
 
-## Testing
+## Testing kode Anda
 
-```bash
-composer test:unit         # semua unit test
-composer test:integration  # memanggil sandbox sungguhan, butuh .env
-composer test:coverage     # butuh pcov atau xdebug terpasang
-composer analyse
-composer qa
+Anda tidak perlu memanggil Midtrans untuk menguji kode yang memakai SDK ini.
+`MidtransClient` menerima `Transport` lewat konstruktor, jadi ganti saja dengan
+yang mengembalikan respons yang sudah Anda tentukan:
+
+```php
+<?php
+
+use Aliziodev\MidtransPhp\Http\HttpResponse;
+use Aliziodev\MidtransPhp\Http\Transport;
+
+final class FakeTransport implements Transport
+{
+    /** @var list<array{method: string, url: string, body: ?string}> */
+    public array $requests = [];
+
+    public function __construct(private readonly HttpResponse $response) {}
+
+    public function request(
+        string $method,
+        string $url,
+        array $headers,
+        ?string $jsonBody,
+        int $timeoutSeconds,
+        int $maxRetries = 0,
+        int $retryDelayMs = 0,
+    ): HttpResponse {
+        $this->requests[] = ['method' => $method, 'url' => $url, 'body' => $jsonBody];
+
+        return $this->response;
+    }
+}
 ```
 
-### Suite integrasi
+Pakai di test:
 
-Salin `.env.example` ke `.env`, isi kredensial sandbox, lalu jalankan. Tanpa
-`.env` suite ini di-skip, bukan gagal.
+```php
+<?php
 
-Suite ini memanggil API Midtrans yang sungguhan. Itu disengaja: unit test
-membuktikan SDK menyusun request seperti yang dimaksudkan, tapi tidak
-membuktikan Midtrans setuju. Tiga bug lolos ke rilis justru karena request-nya
-dibangun persis seperti dokumentasi, dan dokumentasinya bukan yang API lakukan —
-host Snap-BI yang salah, 404 berbadan kosong yang dilaporkan sebagai gagal
-parse, dan `convertInvoice` yang memakai PATCH.
+$transport = new FakeTransport(new HttpResponse(200, json_encode([
+    'status_code' => '201',
+    'order_id' => 'ORDER-1',
+    'transaction_status' => 'pending',
+])));
 
-Guard-nya menegaskan **host** yang dituju mengandung `sandbox`, bukan menebak
-dari bentuk key. Akun sandbox lama memakai prefiks `SB-Mid-server-`, yang baru
-memakai `Mid-server-` — bentuk yang selama ini dipakai production — jadi prefiks
-tidak lagi membedakan lingkungan.
+$client = new MidtransClient($config, $transport);
 
-Yang sudah dijalankan terhadap sandbox sungguhan: Snap token dan URL, charge
-kartu dan VA dan GoPay dan echannel, status, status B2B, cancel, expire, BIN,
-Snap Preference v3, registrasi kartu, balance mutation, siklus payment link,
-siklus invoice, konversi quotation, siklus subscription penuh, pre-auth capture
-dan release, serta sebelas endpoint Snap-BI.
+$result = $client->chargeTransaction([
+    'payment_type' => 'bank_transfer',
+    'transaction_details' => ['order_id' => 'ORDER-1', 'gross_amount' => 150000],
+    'bank_transfer' => ['bank' => 'bca'],
+]);
 
-### Yang belum pernah diuji, dan kenapa
-
-Dari 57 method yang menyentuh API, **41 sudah dijawab sandbox sungguhan dan 16
-belum**. Tidak satu pun karena kodenya. Tiap baris di bawah diperiksa ke
-dokumentasi resmi Midtrans, bukan disimpulkan dari pesan error.
-
-**Butuh aktivasi merchant — 13**
-
-| Method | Dasar |
-| --- | --- |
-| `refundTransaction`, `refundTransactionDirect`, `refundQris`, `refundDirectDebit` | [Introduction to Refund](https://docs.midtrans.com/docs/introduction-to-refund): *"If your refund button has not been activated, you can activate it by filling out the [form]"*. Sandbox menjawab `412`. |
-| `getCardPointInquiry` | Sandbox menjawab `402 Permission for this feature is not granted.` |
-| `captureAuthorization`, `voidAuthorization` | [Testing Payment on Sandbox](https://docs.midtrans.com/docs/testing-payment-on-sandbox): *"Please contact your sales representative to enable pre auth flow in sandbox environment."* |
-| `getGopayPromotions` | Dokumen yang sama: *"Please contact your sales representative to enable promotion in sandbox environment."* Sandbox menjawab `HTTP 500`. |
-| `getPaymentAccount`, `unlinkPaymentAccount`, `bindAccount`, `unbindAccount`, `getAccountBindingStatus` | [Testing GoPay Tokenization](https://docs.midtrans.com/reference/testing-gopay-tokenization-on-sandbox-environment): aktif otomatis bila nomor telepon dan email merchant sudah terisi, dan bila tetap tidak, *"contact their sales representative"*. Dengan profil sandbox terisi, channel tetap menjawab `102 Merchant not authorised`. |
-
-**Tidak ada cara memicunya — 2**
-
-`approveTransaction` dan `denyTransaction`. Referensi resminya menyebut keduanya
-hanya berlaku untuk *challenged transaction*
-([approve](https://docs.midtrans.com/reference/approve-transaction),
-[deny](https://docs.midtrans.com/reference/deny-transaction)), dan tidak ada satu
-pun halaman Midtrans — Testing Payment on Sandbox maupun Fraud Detection System —
-yang menerangkan cara menghasilkan `fraud_status: challenge`. Kartu
-"Denied by FDS" pun menghasilkan `transaction_status: deny` dengan
-`fraud_status: accept`, bukan challenge.
-
-**Sengaja tidak dijalankan — 1**
-
-`updateSnapPreferences` adalah `PATCH` yang mengubah pengaturan Snap merchant
-yang sungguhan. Menjalankannya sekadar untuk mencentang daftar berarti mengubah
-konfigurasi akun orang lain.
-
-**Di luar daftar method**: host production tidak pernah disentuh sama sekali, dan
-verifikasi notifikasi Snap-BI belum pernah menghadapi notifikasi asli karena
-public key Midtrans belum tersedia.
-
-Artinya, untuk Core API dan Snap — yang dipakai mayoritas — package ini terbukti
-hidup. Kalau Anda butuh refund, GoPay Tokenization, atau notifikasi Snap-BI,
-jalur itu belum pernah dibuktikan dan pantas Anda uji sendiri begitu Midtrans
-mengaktifkannya.
-
-`CurlTransportServerTest` menjalankan `CurlTransport` terhadap server bawaan PHP
-di `127.0.0.1`, karena loop retry hanya benar-benar terbukti lewat socket asli —
-jumlah percobaan, `Retry-After` yang ditunggu, capture header, dan redirect yang
-tidak diikuti. Konsekuensinya suite jadi ~6 detik, bukan ~0,06 detik. Kalau
-sedang iterasi cepat, lewati saja:
-
-```bash
-vendor/bin/phpunit --testsuite unit --exclude-group transport
+expect($result['transaction_status'])->toBe('pending');
+expect($transport->requests[0]['method'])->toBe('POST');
 ```
 
-Coverage dilaporkan ke Codecov pada tiap push. Butuh secret `CODECOV_TOKEN` di
-repository settings.
+Untuk menguji penanganan error Anda, kembalikan status dan body yang sesuai —
+SDK akan melempar `MidtransApiException` seperti terhadap API sungguhan:
+
+```php
+<?php
+
+$transport = new FakeTransport(new HttpResponse(404, json_encode([
+    'status_code' => '404',
+    'status_message' => "Transaction doesn't exist.",
+])));
+```
+
+Pengguna Laravel punya jalan yang lebih pendek: `Midtrans::fake()` di
+[aliziodev/laravel-midtrans](https://github.com/aliziodev/laravel-midtrans).
+
+## Seberapa jauh package ini terbukti
+
+Package ini tidak hanya diuji dengan mock. Suite integrasinya memanggil sandbox
+Midtrans yang sungguhan, dan **41 dari 57 method sudah dijawab API hidup** —
+Snap, charge kartu dan VA dan GoPay dan echannel, status, cancel, expire, BIN,
+Snap Preference v3, siklus payment link, invoice, quotation, subscription,
+pre-auth kartu, balance, serta sebelas endpoint Snap-BI.
+
+Enam belas sisanya belum, dan itu perlu Anda ketahui sebelum bergantung padanya.
+Tidak satu pun karena kodenya — semuanya butuh sesuatu yang Midtrans harus
+aktifkan lebih dulu, atau tidak punya cara pemicu di sandbox.
+
+| Belum terbukti | Kenapa | Yang perlu Anda lakukan |
+| --- | --- | --- |
+| `refundTransaction`, `refundTransactionDirect`, `refundQris`, `refundDirectDebit` | Refund harus diaktifkan Midtrans per merchant ([dokumentasi](https://docs.midtrans.com/docs/introduction-to-refund)); sandbox menjawab `412` | Ajukan lewat [formulir refund](https://midtrans.com/contact-us/transaction-information/prosedur-refund-pengembalian-dana), lalu uji sendiri |
+| `getPaymentAccount`, `unlinkPaymentAccount`, `bindAccount`, `unbindAccount`, `getAccountBindingStatus` | GoPay Tokenization belum aktif; channel menjawab `102 Merchant not authorised` | Pastikan telepon dan email merchant terisi di *Settings > General Settings*; kalau tetap, hubungi sales rep Midtrans |
+| `captureAuthorization`, `voidAuthorization` | Pre-auth Snap-BI harus diaktifkan ([dokumentasi](https://docs.midtrans.com/docs/testing-payment-on-sandbox)) | Hubungi sales rep Midtrans |
+| `getGopayPromotions` | Promosi harus diaktifkan; sandbox menjawab `HTTP 500` | Hubungi sales rep Midtrans |
+| `getCardPointInquiry` | Sandbox menjawab `402 Permission for this feature is not granted.` | Hubungi sales rep Midtrans |
+| `approveTransaction`, `denyTransaction` | Hanya berlaku untuk transaksi ber-`fraud_status: challenge`, dan Midtrans tidak mendokumentasikan cara memicunya di sandbox | Uji di akun Anda sendiri dengan aturan FDS yang Anda pasang |
+| `updateSnapPreferences` | Sengaja tidak dijalankan: `PATCH`-nya mengubah pengaturan Snap merchant sungguhan | Uji di akun uji Anda sendiri |
+
+Selain itu: host **production** tidak pernah disentuh suite mana pun, dan
+verifikasi notifikasi Snap-BI belum pernah menghadapi notifikasi asli.
+
+Praktisnya — kalau Anda memakai Core API dan Snap, yang mencakup mayoritas
+integrasi, jalur yang Anda pakai sudah terbukti hidup. Kalau Anda butuh refund,
+GoPay Tokenization, atau notifikasi Snap-BI, perlakukan jalur itu sebagai belum
+terbukti dan uji sendiri di sandbox Anda begitu Midtrans mengaktifkannya.
 
 ## Roadmap
 
@@ -721,6 +736,13 @@ repository settings.
 - PSR-3 logger hook untuk audit trail request/response
 - Integrasi test yang lebih luas untuk skenario sandbox
 - Hapus `getCardToken()` / `registerCard()` di 3.0.0
+
+## Kontribusi
+
+Test integrasi untuk endpoint yang belum terbukti di atas paling kami hargai —
+kalau akun Midtrans Anda punya akses yang belum kami punya, itu menutup celah
+yang tidak bisa kami tutup sendiri. Cara menjalankan suite, aturan guard sandbox,
+dan konvensi commit ada di [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Catatan
 
