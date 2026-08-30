@@ -1,3 +1,9 @@
+## [2.0.4](https://github.com/aliziodev/midtrans-php/compare/v2.0.3...v2.0.4) (2026-08-30)
+
+### Bug Fixes
+
+* **snap-bi:** document the two constraints that block createVa ([7eccecc](https://github.com/aliziodev/midtrans-php/commit/7eccecc690a1764c977a3cff130b5248bc89398d))
+
 ## [2.0.3](https://github.com/aliziodev/midtrans-php/compare/v2.0.2...v2.0.3) (2026-08-30)
 
 ### Bug Fixes
